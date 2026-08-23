@@ -23,8 +23,8 @@
           force = true;
           text = builtins.toJSON {
             configVersion = 4;
-            wallpaperPath = "${./../Wallpapers}/wallhaven-211op9.jpg";
-            wallpaperCyclingFolderPath = "${./../Wallpapers}";
+            wallpaperPath = "${./../wallpapers}/wallhaven-211op9.jpg";
+            wallpaperCyclingFolderPath = "${./../wallpapers}";
           };
         };
         programs.dank-material-shell = {

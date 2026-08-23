@@ -19,7 +19,7 @@
 
     qt = {
       enable = true;
-      platformTheme.name = "qtct"; # driven by Noctalia's qt6ct template
+      platformTheme.name = "qtct"; 
       style.name = "kvantum";
     };
 

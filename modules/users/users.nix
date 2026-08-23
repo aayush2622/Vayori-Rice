@@ -69,7 +69,7 @@
     };
 
     config = lib.mkIf (cfg != { }) {
-      users.mutableUsers = lib.any (u: u.hashedPassword == null) (lib.attrValues cfg);
+      users.mutableUsers = false;
 
       users.users = lib.mapAttrs (name: u: {
         isNormalUser = true;

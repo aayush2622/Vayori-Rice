@@ -67,6 +67,21 @@
       };
 
       initContent = ''
+      # ─────────────────────────────────────────────
+      # Prompt + Git branch
+      # ─────────────────────────────────────────────
+
+      autoload -Uz vcs_info
+      precmd() { vcs_info }
+
+      zstyle ':vcs_info:git:*' formats ' (%b)'
+
+      PROMPT='%n %~''${vcs_info_msg_0_} > '
+
+      # ─────────────────────────────────────────────
+      # Fastfetch
+      # ─────────────────────────────────────────────
+
       FASTFETCH_IMAGE_DIR="${./images}"
 
       FASTFETCH_IMAGE=$(
@@ -76,20 +91,20 @@
           -o -iname '*.jpg' \
           -o -iname '*.jpeg' \
           -o -iname '*.webp' \
-          \) \
+        \) \
         | shuf -n 1
       )
 
       if [ -n "$FASTFETCH_IMAGE" ]; then
-      fastfetch \
-      --logo-type kitty \
-      --logo "$FASTFETCH_IMAGE" \
-      --logo-width 32 \
-      --logo-height 16
+        fastfetch \
+          --logo-type kitty \
+          --logo "$FASTFETCH_IMAGE" \
+          --logo-width 32 \
+          --logo-height 16
       else
-      fastfetch
+        fastfetch
       fi
-      '';
+    '';
     };
     programs.fastfetch = {
       enable = true;

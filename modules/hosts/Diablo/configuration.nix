@@ -4,6 +4,15 @@
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     nixpkgs.config.allowUnfree = true;
 
+    # ---- Build time / closure size ----------------------------------------
+    # auto-optimise-store hardlinks identical files across store paths
+    # (free disk savings, tiny CPU cost per build).
+    nix.settings.auto-optimise-store = true;
+    # Skips building the local NixOS manual + nixos-help - saves real build
+    # time and store space; `man configuration.nix` still works fine.
+    # `nixos-option`/online search still cover option docs if you need them.
+    documentation.nixos.enable = false;
+
     # ---- Who lives here -------------------------------------------------
     # Accounts are defined per-person in modules/users/ash.nix,
     # modules/users/random.nix, etc. - see modules/users/users.nix for the
@@ -105,7 +114,6 @@
       nil
       cliphist
       wl-clipboard
-      fastfetch
       grim
       slurp
       hyprpicker # works standalone on niri too, used for color picking

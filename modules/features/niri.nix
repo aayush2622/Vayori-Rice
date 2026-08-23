@@ -66,16 +66,21 @@
         ];
 
         blur = {
-          passes = 3;
+          # 2 passes instead of 3 - each pass roughly doubles the render
+          # cost, and it's rendered on the Intel iGPU (niri itself isn't
+          # PRIME-offloaded to the dGPU); visually near-identical to 3 here.
+          passes = 2;
           offset = 4.0;
           noise = 0.02;
           saturation = 1.15;
         };
         binds = {
-          "Mod+Return".spawn-sh = "kitty";
-          "Mod+E".spawn-sh = "nautilus";
-          "Mod+C".spawn-sh = "code";
-          "Mod+B".spawn-sh = "zen";
+          # Plain `spawn` (no shell needed for a bare command) instead of
+          # `spawn-sh`, which forks `sh -c "..."` first for no reason here.
+          "Mod+Return".spawn = [ "kitty" ];
+          "Mod+E".spawn = [ "nautilus" ];
+          "Mod+C".spawn = [ "code" ];
+          "Mod+B".spawn = [ "zen" ];
           "Control+Shift+Escape".spawn = [ "kitty" "-e" "btop" ];
 
           "Mod+S".spawn = [ "dms" "ipc" "call" "spotlight" "toggle" ];
@@ -97,7 +102,10 @@
 
           "Mod+Shift+W".spawn = [ "dms" "ipc" "wallpaperCarousel" "open" ];
 
-          "Mod+A".spawn-sh = "fuzzel";
+          # DMS's own app launcher instead of a separate launcher binary -
+          # "spotlight" and "launcher" are the same UI (DMS keeps both IPC
+          # names for backwards compat), same call Mod+S already uses.
+          "Mod+A".spawn = [ "dms" "ipc" "call" "spotlight" "toggle" ];
 
           "Mod+Left".focus-column-left = _: { };
           "Mod+Right".focus-column-right = _: { };
