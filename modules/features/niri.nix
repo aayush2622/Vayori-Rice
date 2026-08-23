@@ -23,7 +23,10 @@
 
       settings = {
         xwayland-satellite.path = lib.getExe pkgs.xwayland-satellite;
-
+        #cursor =  {
+          #xcursor-theme = "Bibata-Modern-Ice";
+          #xcursor-size = 24;
+        #};
         input = {
           keyboard.xkb.layout = "us";
           focus-follows-mouse = _: { };
@@ -48,6 +51,23 @@
             spread = 4;
           };
         };
+
+        # `settings.extraConfig` is raw KDL appended after everything above
+        # AND after `extraSettings`' `include` (see nix-wrapper-modules'
+        # niri module: settings -> extraSettings -> settings.extraConfig).
+        # Niri applies last-value-wins for repeated nodes, so without this
+        # the `include "dms/colors.kdl"` above silently overwrites
+        # `layout > border` with matugen's fully-opaque colors, killing the
+        # translucent border set in `layout.border` above. Re-assert it here
+        # so it's what actually wins.
+        extraConfig = ''
+          layout {
+              border {
+                  active-color "#ffffff40"
+                  inactive-color "#ffffff15"
+              }
+          }
+        '';
 
         window-rules = [
           {
@@ -101,10 +121,6 @@
           "Mod+L".spawn = [ "dms" "ipc" "call" "lock" "lock" ];
 
           "Mod+Shift+W".spawn = [ "dms" "ipc" "wallpaperCarousel" "open" ];
-
-          # DMS's own app launcher instead of a separate launcher binary -
-          # "spotlight" and "launcher" are the same UI (DMS keeps both IPC
-          # names for backwards compat), same call Mod+S already uses.
           "Mod+A".spawn = [ "dms" "ipc" "call" "spotlight" "toggle" ];
 
           "Mod+Left".focus-column-left = _: { };
@@ -136,9 +152,10 @@
           "XF86AudioPause".spawn = [ "playerctl" "play-pause" ];
           "XF86AudioNext".spawn = [ "playerctl" "next" ];
           "XF86AudioPrev".spawn = [ "playerctl" "previous" ];
-          "XF86MonBrightnessUp".spawn = [ "dms" "ipc" "call" "brightness" "increment" "5" ];
-          "XF86MonBrightnessDown".spawn = [ "dms" "ipc" "call" "brightness" "decrement" "5" ];
-
+          "XF86MonBrightnessUp".spawn-sh =
+            ''dms ipc call brightness increment 5 "$(dms ipc call brightness list | awk '$1 ~ /^backlight:/ {print $1; exit}')" '';
+          "XF86MonBrightnessDown".spawn-sh =
+            ''dms ipc call brightness decrement 5 "$(dms ipc call brightness list | awk '$1 ~ /^backlight:/ {print $1; exit}')" '';
           "Mod+1".focus-workspace = 1;
           "Mod+2".focus-workspace = 2;
           "Mod+3".focus-workspace = 3;

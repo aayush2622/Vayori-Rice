@@ -72,11 +72,18 @@
       # ─────────────────────────────────────────────
 
       autoload -Uz vcs_info
-      precmd() { vcs_info }
 
       zstyle ':vcs_info:git:*' formats ' (%b)'
 
-      PROMPT='%n %~''${vcs_info_msg_0_} > '
+      precmd() {
+        vcs_info
+
+        if [[ -n "$vcs_info_msg_0_" ]]; then
+          PROMPT='%n %~''${vcs_info_msg_0_}> '
+        else
+          PROMPT='%n> '
+        fi
+      }
 
       # ─────────────────────────────────────────────
       # Fastfetch
@@ -91,10 +98,10 @@
           -o -iname '*.jpg' \
           -o -iname '*.jpeg' \
           -o -iname '*.webp' \
+          -o -iname '*.icon' \
         \) \
         | shuf -n 1
       )
-
       if [ -n "$FASTFETCH_IMAGE" ]; then
         fastfetch \
           --logo-type kitty \
