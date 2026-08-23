@@ -37,7 +37,7 @@
     };
 
     # ---- Networking / locale ----------------------------------------------
-    networking.hostName = "nixos";
+    networking.hostName = "Diablo";
     networking.networkmanager.enable = true;
 
     time.timeZone = "Asia/Kolkata";
@@ -57,7 +57,7 @@
     # ---- Wayland / niri session --------------------------------------------
     # No xserver/desktopManager here: niri is a Wayland-native compositor.
     # `programs.niri.enable` is turned on in features/niri.nix; SDDM is
-    # turned on and themed in features/sddm-qylock.nix.
+    # turned on and themed in features/sddm/sddm-theme.nix.
     services.xserver.xkb = {
       layout = "us";
       variant = "";
@@ -113,17 +113,32 @@
       brightnessctl
       pavucontrol
       adwaita-icon-theme
+      bibata-cursors # the real cursor theme (see home/baseline.nix) - needs
+                      # to be system-wide too, for SDDM's pre-login greeter
+      # fastfetch is NOT listed here on purpose - "terminal" (below) already
+      # brings it in via programs.fastfetch for every user on this host.
     ];
     environment.sessionVariables = {
-      XCURSOR_THEME = "Adwaita";
+      XCURSOR_THEME = "Bibata-Modern-Ice";
       XCURSOR_SIZE = "24";
     };
 
     services.displayManager.sddm.settings = {
       Theme = {
-        CursorTheme = "Adwaita";
+        CursorTheme = "Bibata-Modern-Ice";
         CursorSize = 24;
       };
+    };
+
+    # SDDM's Wayland greeter runs under Weston as its own systemd service,
+    # so it never sees environment.sessionVariables above (that's only
+    # exported to login shells via PAM, after you're already logged in).
+    # Without XCURSOR_THEME/SIZE in the service's own environment, Weston
+    # has no cursor theme to load and draws no pointer at all - hence no
+    # mouse on the login screen.
+    systemd.services.display-manager.environment = {
+      XCURSOR_THEME = "Bibata-Modern-Ice";
+      XCURSOR_SIZE = "24";
     };
 
     system.stateVersion = "25.11";

@@ -2,7 +2,8 @@
   flake.homeModules.apps."dev-tools" = { pkgs, ... }: {
     home.packages = with pkgs; [
       vscode
-      git
+      # git itself is already in the base systemPackages (hosts/Diablo/
+      # configuration.nix) - flakes need it system-wide regardless of apps.
       gh
       lazygit
       docker-compose

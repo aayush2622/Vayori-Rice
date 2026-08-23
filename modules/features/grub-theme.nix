@@ -8,7 +8,7 @@
     #
     # NOTE: double-check the exact subfolder name after your first
     # `nixos-rebuild switch` - if grub doesn't pick it up, run:
-    #   ls ${inputs.grubphemous-theme}
+    #   ls ${inputs.grub-theme}
     # in a `nix repl` and adjust the path below to match (the repo's
     # install script normally copies a `grubphemous/` folder containing
     # theme.txt + background.png).

@@ -11,6 +11,16 @@
     packages.myNiri = inputs.wrapper-modules.wrappers.niri.wrap {
       inherit pkgs;
 
+      # DMS (matugenTemplateNiri = true, in features/dms.nix) renders this
+      # file from the current wallpaper's palette on every theme change -
+      # `optional = true` so niri still starts before DMS has run once.
+      # This has to be a top-level `extraSettings`, sibling to `settings`
+      # below - nesting it inside `settings` serializes it as a literal
+      # (invalid) `extraSettings` KDL node instead.
+      extraSettings = [
+        { include = [ { optional = true; } "~/.config/niri/dms/colors.kdl" ]; }
+      ];
+
       settings = {
         xwayland-satellite.path = lib.getExe pkgs.xwayland-satellite;
 

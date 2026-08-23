@@ -1,9 +1,12 @@
 { inputs, ... }:
 
 {
-  flake.nixosModules.dms = { pkgs, ... }:
+  # Applied to every user on this machine (via config.vayori.users) instead
+  # of being hardcoded to "ash" - otherwise a second user would get a niri
+  # session with no shell running in it at all.
+  flake.nixosModules.dms = { pkgs, lib, config, ... }:
     {
-      home-manager.users.ash = {
+      home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
         imports = [
           inputs.dms.homeModules.dank-material-shell
           inputs.dms-plugin-registry.nixosModules.default
@@ -11,6 +14,18 @@
         xdg.configFile = {
             "DankMaterialShell/settings.json".force = true;
             "DankMaterialShell/plugin_settings.json".force = true;
+        };
+        # Seed the wallpaper picker + auto-cycler with modules/Wallpapers as
+        # their default folder/current wallpaper - same force-overwrite
+        # pattern as settings.json above (DMS can still switch wallpapers
+        # live, it just resets back to this default on the next rebuild).
+        xdg.stateFile."DankMaterialShell/session.json" = {
+          force = true;
+          text = builtins.toJSON {
+            configVersion = 4;
+            wallpaperPath = "${./../Wallpapers}/wallhaven-211op9.jpg";
+            wallpaperCyclingFolderPath = "${./../Wallpapers}";
+          };
         };
         programs.dank-material-shell = {
           enable = true;
@@ -1310,6 +1325,6 @@
             configVersion = 13;
           };
         };
-      };
+      });
     };
 }

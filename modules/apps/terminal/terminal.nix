@@ -14,13 +14,13 @@
         window_padding_width = 10;
         hide_window_decorations = "yes";
         cursor_trail = 1;
-      };
 
-      tab_bar_min_tabs = 1;
-      tab_bar_edge = "bottom";
-      tab_bar_style = "separator";
-      tab_separator = " | ";
-      tab_title_template = "{title}{' :{}:'.format(num_windows) if num_windows > 1 else ''}";
+        tab_bar_min_tabs = 1;
+        tab_bar_edge = "bottom";
+        tab_bar_style = "separator";
+        tab_separator = " | ";
+        tab_title_template = "{title}{' :{}:'.format(num_windows) if num_windows > 1 else ''}";
+      };
 
       extraConfig = ''
       include dank-tabs.conf

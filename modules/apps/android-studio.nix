@@ -13,9 +13,10 @@
       CHROME_EXECUTABLE = "zen"; # so `flutter run -d chrome` works with Zen instead of missing Chrome
     };
 
-    # `adb` device access needs the "adbusers" group and the system-wide
-    # `programs.adb.enable`, both handled once for everyone in
-    # modules/features/dev-system.nix - add "adbusers" to your extraGroups
-    # in your users/<you>.nix file if you pick this app.
+    # `adb` device access works out of the box (systemd 258+ handles the
+    # uaccess udev rules automatically). The "adbusers" group is declared
+    # in modules/features/dev-system.nix purely for compatibility with
+    # extraGroups entries that still reference it - add it in your
+    # users/<you>.nix file if you pick this app, but it's not required.
   };
 }
