@@ -1,0 +1,20 @@
+result
+result-*
+
+# VM images
+*.qcow2
+*.img
+
+# Secrets
+*.key
+*.pem
+*.secret
+secrets/
+.env
+.env.*
+
+# Editor files
+.vscode/
+.claude/
+.idea/
+*.swp
