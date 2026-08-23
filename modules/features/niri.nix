@@ -19,6 +19,22 @@
       # (invalid) `extraSettings` KDL node instead.
       extraSettings = [
         { include = [ { optional = true; } "~/.config/niri/dms/colors.kdl" ]; }
+        # niri's `include` merges into the already-parsed `layout` node
+        # rather than erroring as a duplicate (unlike a second static
+        # `layout { }` block, which niri's validator hard-rejects) - so a
+        # second include listed *after* DMS's above wins the merge and
+        # re-asserts our translucent border over DMS's opaque matugen one,
+        # while shadow/focus-ring/insert-hint/etc. stay dynamically themed.
+        {
+          include = "${pkgs.writeText "niri-border-override.kdl" ''
+            layout {
+                border {
+                    active-color "#ffffff40"
+                    inactive-color "#ffffff15"
+                }
+            }
+          ''}";
+        }
       ];
 
       settings = {
@@ -51,23 +67,6 @@
             spread = 4;
           };
         };
-
-        # `settings.extraConfig` is raw KDL appended after everything above
-        # AND after `extraSettings`' `include` (see nix-wrapper-modules'
-        # niri module: settings -> extraSettings -> settings.extraConfig).
-        # Niri applies last-value-wins for repeated nodes, so without this
-        # the `include "dms/colors.kdl"` above silently overwrites
-        # `layout > border` with matugen's fully-opaque colors, killing the
-        # translucent border set in `layout.border` above. Re-assert it here
-        # so it's what actually wins.
-        extraConfig = ''
-          layout {
-              border {
-                  active-color "#ffffff40"
-                  inactive-color "#ffffff15"
-              }
-          }
-        '';
 
         window-rules = [
           {
