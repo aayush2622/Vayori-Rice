@@ -10,14 +10,11 @@
     };
 
     zenPrefs = {
-      # Check these out at about:config
       "extensions.autoDisableScopes" = 0;
       "extensions.pocket.enabled" = false;
     };
 
     zenExtensions = [
-      # Find the short ID in the addon's url, then look up its guid at
-      # https://addons.mozilla.org/api/v5/addons/addon/!SHORT_ID!/
       (firefoxExtension "ublock-origin" "uBlock0@raymondhill.net")
     ];
 
@@ -67,9 +64,5 @@
       };
   in {
     home.packages = [ zen-browser ];
-
-    # Noctalia can also theme Zen directly (Settings -> Color Scheme ->
-    # Templates -> Zen Browser) via CSS injection - see
-    # https://docs.noctalia.dev/v4/theming/program-specific/zenbrowser/
   };
 }

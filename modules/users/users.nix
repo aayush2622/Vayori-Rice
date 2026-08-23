@@ -1,18 +1,8 @@
 { self, inputs, ... }: {
-  # This is the ONLY file that needs to understand how a "user" is built.
-  # Each person gets their own file (see ash.nix / random.nix) that just
-  # fills in `vayori.users.<name> = { ... }` with account info (name,
-  # password, groups, shell). Apps are picked ONCE PER MACHINE via
-  # `vayori.apps` in hosts/<machine>/configuration.nix - every user on
-  # that machine gets the same set. Add a new person by copying one of
-  # the users/*.nix files - never touch this one.
   flake.nixosModules.vayoriUsers = { config, lib, pkgs, ... }:
   let
     cfg = config.vayori.users;
 
-    # Auto-discovered from modules/apps/*.nix - add a new app by dropping
-    # a file there (flake.homeModules.apps."name" = ...), nothing to sync
-    # here.
     availableApps = builtins.attrNames self.homeModules.apps;
 
     userSubmodule = lib.types.submodule ({ name, ... }: {
@@ -23,7 +13,6 @@
           description = "Display name (GECOS).";
         };
 
-        # Generate with: mkpasswd -m sha-512
         hashedPassword = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
@@ -61,7 +50,6 @@
       description = "One entry per person using this machine.";
     };
 
-    # ---- The actual "pick your apps for this machine" bit -----------------
     options.vayori.apps = lib.mkOption {
       type = lib.types.listOf (lib.types.enum availableApps);
       default = [ ];
@@ -89,7 +77,7 @@
 
       home-manager.users = lib.mapAttrs (name: u: { ... }: {
         imports = [
-          self.homeModules.baseline # kitty + gtk/qt glass theming, everyone gets this
+          self.homeModules.baseline
         ] ++ (map (app: self.homeModules.apps.${app}) config.vayori.apps);
 
         home.stateVersion = config.system.stateVersion;

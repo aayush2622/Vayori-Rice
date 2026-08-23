@@ -11,20 +11,8 @@
     packages.myNiri = inputs.wrapper-modules.wrappers.niri.wrap {
       inherit pkgs;
 
-      # DMS (matugenTemplateNiri = true, in features/dms.nix) renders this
-      # file from the current wallpaper's palette on every theme change -
-      # `optional = true` so niri still starts before DMS has run once.
-      # This has to be a top-level `extraSettings`, sibling to `settings`
-      # below - nesting it inside `settings` serializes it as a literal
-      # (invalid) `extraSettings` KDL node instead.
       extraSettings = [
         { include = [ { optional = true; } "~/.config/niri/dms/colors.kdl" ]; }
-        # niri's `include` merges into the already-parsed `layout` node
-        # rather than erroring as a duplicate (unlike a second static
-        # `layout { }` block, which niri's validator hard-rejects) - so a
-        # second include listed *after* DMS's above wins the merge and
-        # re-asserts our translucent border over DMS's opaque matugen one,
-        # while shadow/focus-ring/insert-hint/etc. stay dynamically themed.
         {
           include = "${pkgs.writeText "niri-border-override.kdl" ''
             layout {
@@ -39,10 +27,6 @@
 
       settings = {
         xwayland-satellite.path = lib.getExe pkgs.xwayland-satellite;
-        #cursor =  {
-          #xcursor-theme = "Bibata-Modern-Ice";
-          #xcursor-size = 24;
-        #};
         input = {
           keyboard.xkb.layout = "us";
           focus-follows-mouse = _: { };
@@ -85,17 +69,12 @@
         ];
 
         blur = {
-          # 2 passes instead of 3 - each pass roughly doubles the render
-          # cost, and it's rendered on the Intel iGPU (niri itself isn't
-          # PRIME-offloaded to the dGPU); visually near-identical to 3 here.
           passes = 2;
           offset = 4.0;
           noise = 0.02;
           saturation = 1.15;
         };
         binds = {
-          # Plain `spawn` (no shell needed for a bare command) instead of
-          # `spawn-sh`, which forks `sh -c "..."` first for no reason here.
           "Mod+Return".spawn = [ "kitty" ];
           "Mod+E".spawn = [ "nautilus" ];
           "Mod+C".spawn = [ "code" ];

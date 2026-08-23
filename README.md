@@ -22,10 +22,10 @@ file in the right folder" - see [Extending it](#extending-it).
 
 > [!WARNING]
 > **This is one person's real machine config, not a generic template.**
-> Disk UUIDs, GPU bus IDs, and account details in `modules/hosts/Diablo/`
-> and `modules/users/` are specific to the original author's laptop.
-> Deploying it unmodified **will not boot** on different hardware. You can
-> absolutely use this as a base - read
+> Disk UUIDs, GPU bus IDs, and account details in
+> `modules/hosts/Diablo/host.nix` and `_hardware.nix` are specific to the
+> original author's laptop. Deploying it unmodified **will not boot** on
+> different hardware. You can absolutely use this as a base - read
 > [Using this on your own machine](#using-this-on-your-own-machine) first.
 
 ## Contents
@@ -36,6 +36,7 @@ file in the right folder" - see [Extending it](#extending-it).
 - [Using this on your own machine](#using-this-on-your-own-machine)
 - [Layout](#layout)
 - [Extending it](#extending-it)
+- [Documentation](#documentation)
 - [Keybinds](#keybinds-niri)
 - [Credits](#credits)
 - [Known caveats](#known-caveats)
@@ -87,38 +88,46 @@ sudo nixos-rebuild switch --flake .#Diablo
 
 ## Using this on your own machine
 
-Everything below lives in `modules/hosts/Diablo/` and `modules/users/`.
-Nothing in `modules/features/` or `modules/apps/` needs to change to move
-this to different hardware.
+A host is exactly **two files**, both under `modules/hosts/<name>/`:
+`host.nix` (hostname, users, apps, timezone, bootloader, packages - all of
+it) and `_hardware.nix` (disks, GPU - the `hardware-configuration.nix`
+equivalent). Nothing in `modules/features/` or `modules/apps/` needs to
+change to move this to different hardware.
 
-1. **Rename the host** *(optional but recommended)* - copy
-   `modules/hosts/Diablo/` to `modules/hosts/<yourhostname>/`, and update
-   `networking.hostName` in its `configuration.nix`.
+> [!TIP]
+> `_hardware.nix` starts with an underscore on purpose - `import-tree`
+> (which auto-imports every other `.nix` file under `modules/`) skips any
+> path containing `/_`, so this one plain NixOS module doesn't get treated
+> as its own flake-parts module. Keep the underscore if you rename it.
 
-2. **Replace `hardware.nix`** with your own. Boot the live ISO (or your
+1. **Copy and rename the host directory**:
+
+   ```bash
+   cp -r modules/hosts/Diablo modules/hosts/<yourhostname>
+   ```
+
+2. **Replace `_hardware.nix`** with your own. Boot the live ISO (or your
    existing NixOS install) and run:
 
    ```bash
-   sudo nixos-generate-config --show-hardware-config > modules/hosts/<yourhostname>/hardware.nix
+   sudo nixos-generate-config --show-hardware-config > modules/hosts/<yourhostname>/_hardware.nix
    ```
 
-   Then re-add the `flake.nixosModules.<Name>Hardware = { ... }: { ... };`
-   wrapper around it (see the existing file for the shape), and **drop the
-   Nvidia/Optimus-specific block entirely** unless you also have an Nvidia
-   Optimus laptop - `intelBusId`/`nvidiaBusId` are PCI addresses specific
-   to that one machine (`lspci` to find yours if you do need it).
+   **Drop the Nvidia/Optimus-specific block entirely** unless you also have
+   an Nvidia Optimus laptop - `intelBusId`/`nvidiaBusId` are PCI addresses
+   specific to that one machine (`lspci` to find yours if you do need it).
 
-3. **Add yourself as a user** - copy `modules/users/random.nix` to
-   `modules/users/<you>.nix`, set `vayori.users.<you>` (fullName, groups,
-   shell), generate a password hash with `mkpasswd -m sha-512`, and list
-   `self.nixosModules.user<You>` in your host's `default.nix` instead of
-   `userAsh`/`userRandom`.
+3. **Edit `host.nix`**:
+   - Change `Diablo` (the `flake.nixosConfigurations.Diablo` line and
+     `networking.hostName`) to `<yourhostname>`.
+   - Replace the `vayori.users` block with your own people - each entry
+     takes `fullName`/`hashedPassword`/`extraGroups`/`shell`/`avatar`/
+     `extraPackages` (see `modules/users/users.nix` for what each does;
+     generate a password hash with `mkpasswd -m sha-512`).
+   - Adjust `vayori.apps` - a plain list of names from `modules/apps/*.nix`.
+   - Adjust timezone/locale/bootloader/packages further down as needed.
 
-4. **Pick your apps** - edit `vayori.apps` in your host's
-   `configuration.nix`; it's a plain list of names from
-   `modules/apps/*.nix`.
-
-5. **Rebuild**:
+4. **Rebuild**:
 
    ```bash
    sudo nixos-rebuild switch --flake .#<yourhostname>
@@ -136,40 +145,46 @@ flake.nix                    inputs + `import-tree ./modules` (see modules/parts
 modules/
   parts.nix                  supported `systems` for flake-parts
   registry.nix                declares the flake.homeModules option (flake-parts has no builtin one)
-  hosts/<name>/
-    default.nix                nixosConfigurations.<name>, lists which nixosModules this host gets
-    configuration.nix          host-specific settings: vayori.apps, locale, bootloader, base packages
-    hardware.nix                hardware-configuration.nix equivalent (disks, GPU, etc.) - machine-specific
+  hosts/<name>/               everything for one machine - just these two files:
+    host.nix                    nixosConfigurations.<name>: users, apps, timezone, bootloader, packages
+    _hardware.nix                hardware-configuration.nix equivalent (disks, GPU) - leading `_` = import-tree ignores it
   users/
-    users.nix                  the vayori.users / vayori.apps option definitions - read this first
-    <name>.nix                 one file per person: vayori.users.<name> = { fullName, hashedPassword, extraGroups, shell, avatar, extraPackages }
+    users.nix                  the vayori.users / vayori.apps option definitions - shared framework, not per-host
   features/                    system-wide (NixOS) modules: niri, dms, fonts, portals, grub/sddm theming, dev-system
   apps/                        opt-in per-user (home-manager) modules, picked via vayori.apps
   home/
     baseline.nix                GTK/Qt theming every user gets, regardless of vayori.apps
-  Wallpapers/                  default wallpaper set (session.json is seeded to point here, see features/dms.nix)
+  wallpapers/                  default wallpaper set (session.json is seeded to point here, see features/dms.nix)
 ```
 
 </details>
 
 ## Extending it
 
-**Add a person** to an existing host: copy `modules/users/random.nix` to
-`modules/users/<name>.nix`, fill in `vayori.users.<name>`, then add
-`self.nixosModules.user<Name>` to that host's `default.nix`. Apps are picked
-once per *machine* (`vayori.apps` in `hosts/<host>/configuration.nix`), not
-per person - everyone on a host gets the same app set.
+**Add a person** to an existing host: add another entry to the
+`vayori.users` block in that host's `host.nix` - no separate file, nothing
+else to wire up. Apps are picked once per *machine* (`vayori.apps`, same
+file), not per person - everyone on a host gets the same app set.
 
 **Add an app**: drop a file in `modules/apps/` that sets
 `flake.homeModules.apps."<name>"`. It's automatically a valid entry for
 `vayori.apps` - nothing else to wire up (see `modules/users/users.nix`,
 `availableApps = builtins.attrNames self.homeModules.apps`).
 
-**Add a host**: copy `modules/hosts/Diablo/` to `modules/hosts/<name>/`,
-regenerate `hardware.nix` from the target machine's own
-`hardware-configuration.nix`, and adjust `configuration.nix` (hostname,
-`vayori.apps`, bootloader, locale). Full walkthrough:
+**Add a host**: copy `modules/hosts/Diablo/` to `modules/hosts/<name>/`
+and edit its two files. Full walkthrough:
 [Using this on your own machine](#using-this-on-your-own-machine).
+
+---
+
+## Documentation
+
+The `.nix` files themselves are kept comment-free - every "why" behind a
+setting (plus a few real gotchas worth knowing before you edit one) lives
+in [docs/CONFIGURATION.md](docs/CONFIGURATION.md) instead, organized to
+match `modules/`. Worth reading before touching `host.nix`, `niri.nix`, or
+`dms.nix` in particular - each has at least one non-obvious constraint
+that'll bite silently otherwise.
 
 ---
 

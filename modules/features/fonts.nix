@@ -4,8 +4,8 @@
       inter
       noto-fonts
       noto-fonts-color-emoji
-      nerd-fonts.jetbrains-mono # kitty + bar monospace glyphs
-      material-symbols # Noctalia's icon font
+      nerd-fonts.jetbrains-mono
+      material-symbols
     ];
 
     fonts.fontconfig.defaultFonts = {

@@ -1,6 +1,4 @@
 { self, inputs, ... }: {
-  # Imported for every user in modules/users/users.nix - GTK/Qt theming is
-  # the one piece of the rice nobody opts out of.
   flake.homeModules.baseline = { pkgs, ... }: {
     gtk = {
       enable = true;

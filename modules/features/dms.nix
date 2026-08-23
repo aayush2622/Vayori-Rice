@@ -1,24 +1,17 @@
 { inputs, ... }:
 
 {
-  # Applied to every user on this machine (via config.vayori.users) instead
-  # of being hardcoded to "ash" - otherwise a second user would get a niri
-  # session with no shell running in it at all.
   flake.nixosModules.dms = { pkgs, lib, config, ... }:
-    {
-      home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
+  {
+    home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
         imports = [
           inputs.dms.homeModules.dank-material-shell
           inputs.dms-plugin-registry.nixosModules.default
         ];
         xdg.configFile = {
-            "DankMaterialShell/settings.json".force = true;
-            "DankMaterialShell/plugin_settings.json".force = true;
+          "DankMaterialShell/settings.json".force = true;
+          "DankMaterialShell/plugin_settings.json".force = true;
         };
-        # Seed the wallpaper picker + auto-cycler with modules/Wallpapers as
-        # their default folder/current wallpaper - same force-overwrite
-        # pattern as settings.json above (DMS can still switch wallpapers
-        # live, it just resets back to this default on the next rebuild).
         xdg.stateFile."DankMaterialShell/session.json" = {
           force = true;
           text = builtins.toJSON {
@@ -40,12 +33,6 @@
           enableSystemMonitoring = true;
           enableDynamicTheming = true;
 
-          /*
-            ============================================================
-            PLUGINS
-            ============================================================
-          */
-
           plugins = {
             wallpaperCarousel = {
               enable = true;
@@ -62,29 +49,7 @@
             };
           };
 
-          /*
-            ============================================================
-            DMS SETTINGS
-            ============================================================
-            
-            IMPORTANT:
-            
-              default.settings = { ... };
-            
-            is OLD and must NOT be used.
-            
-            Use:
-            
-              settings = { ... };
-          */
-
           settings = {
-
-            /*
-              ----------------------------------------------------------
-              THEME
-              ----------------------------------------------------------
-            */
 
             currentThemeName = "dynamic";
             currentThemeCategory = "dynamic";
@@ -109,12 +74,6 @@
 
             cornerRadius = 12;
 
-            /*
-              ----------------------------------------------------------
-              COMPOSITOR
-              ----------------------------------------------------------
-            */
-
             niriLayoutGapsOverride = -1;
             niriLayoutRadiusOverride = -1;
             niriLayoutBorderSize = -1;
@@ -131,12 +90,6 @@
             mangoLayoutBorderSize = -1;
             mangoTrackpadNaturalScrolling = true;
 
-            /*
-              ----------------------------------------------------------
-              CALENDAR / CLOCK
-              ----------------------------------------------------------
-            */
-
             firstDayOfWeek = -1;
             showWeekNumber = false;
             calendarBackend = "auto";
@@ -145,22 +98,10 @@
             showSeconds = false;
             padHours12Hour = false;
 
-            /*
-              ----------------------------------------------------------
-              WEATHER
-              ----------------------------------------------------------
-            */
-
             useFahrenheit = false;
             windSpeedUnit = "kmh";
             useAutoLocation = false;
             weatherEnabled = true;
-
-            /*
-              ----------------------------------------------------------
-              ANIMATION
-              ----------------------------------------------------------
-            */
 
             nightModeEnabled = false;
 
@@ -178,12 +119,6 @@
             animationVariant = 0;
             motionEffect = 0;
 
-            /*
-              ----------------------------------------------------------
-              MATERIAL 3 ELEVATION
-              ----------------------------------------------------------
-            */
-
             m3ElevationEnabled = true;
             m3ElevationIntensity = 12;
             m3ElevationOpacity = 30;
@@ -195,12 +130,6 @@
             popoutElevationEnabled = true;
             barElevationEnabled = true;
 
-            /*
-              ----------------------------------------------------------
-              BLUR
-              ----------------------------------------------------------
-            */
-
             blurEnabled = true;
             blurForegroundLayers = true;
             blurLayerOutlineOpacity = 0.12;
@@ -210,24 +139,12 @@
             blurBorderCustomColor = "#ffffff";
             blurBorderOpacity = 0.35;
 
-            /*
-              ----------------------------------------------------------
-              WALLPAPER
-              ----------------------------------------------------------
-            */
-
             wallpaperFillMode = "Fill";
             blurredWallpaperLayer = false;
             blurWallpaperOnOverview = true;
 
             wallpaperBackgroundColorMode = "black";
             wallpaperBackgroundCustomColor = "#000000";
-
-            /*
-              ----------------------------------------------------------
-              BAR / GENERAL WIDGETS
-              ----------------------------------------------------------
-            */
 
             showLauncherButton = true;
             showWorkspaceSwitcher = true;
@@ -264,12 +181,6 @@
 
             showControlCenterButton = true;
             showCapsLockIndicator = true;
-
-            /*
-              ----------------------------------------------------------
-              CONTROL CENTER
-              ----------------------------------------------------------
-            */
 
             controlCenterShowNetworkIcon = true;
             controlCenterShowBluetoothIcon = true;
@@ -344,12 +255,6 @@
               }
             ];
 
-            /*
-              ----------------------------------------------------------
-              WORKSPACES
-              ----------------------------------------------------------
-            */
-
             showWorkspaceIndex = true;
             showWorkspaceName = false;
             showWorkspacePadding = false;
@@ -410,12 +315,6 @@
 
             workspaceNameIcons = {};
 
-            /*
-              ----------------------------------------------------------
-              MEDIA
-              ----------------------------------------------------------
-            */
-
             waveProgressEnabled = true;
             scrollTitleEnabled = true;
             mediaAdaptiveWidthEnabled = true;
@@ -429,12 +328,6 @@
 
             mediaExcludePlayers = [];
             mediaSize = 1;
-
-            /*
-              ----------------------------------------------------------
-              APPLICATIONS / LAUNCHER
-              ----------------------------------------------------------
-            */
 
             clockCompactMode = false;
 
@@ -474,12 +367,6 @@
             clockDateFormat = "";
             lockDateFormat = "";
 
-            /*
-              ----------------------------------------------------------
-              GREETER
-              ----------------------------------------------------------
-            */
-
             greeterRememberLastSession = true;
             greeterRememberLastUser = true;
 
@@ -495,12 +382,6 @@
             greeterPamExternallyManaged = false;
             greeterSyncPending = false;
             greeterSyncBaseline = {};
-
-            /*
-              ----------------------------------------------------------
-              LAUNCHER
-              ----------------------------------------------------------
-            */
 
             appLauncherViewMode = "list";
             spotlightModalViewMode = "list";
@@ -554,12 +435,6 @@
             spotlightBarShowModeChips = false;
             keybindsFloatingWindow = false;
 
-            /*
-              ----------------------------------------------------------
-              DASHBOARD
-              ----------------------------------------------------------
-            */
-
             dashTabs = [
               {
                 id = "overview";
@@ -584,12 +459,6 @@
             ];
 
             networkPreference = "auto";
-
-            /*
-              ----------------------------------------------------------
-              ICON / CURSOR
-              ----------------------------------------------------------
-            */
 
             iconThemeDark = "System Default";
             iconThemeLight = "System Default";
@@ -624,12 +493,6 @@
             launcherLogoContrast = 1;
             launcherLogoSizeOffset = 0;
 
-            /*
-              ----------------------------------------------------------
-              FONTS
-              ----------------------------------------------------------
-            */
-
             fontFamily = "Inter Variable";
             monoFontFamily = "Fira Code";
 
@@ -638,12 +501,6 @@
 
             textRenderType = 0;
             textRenderQuality = 0;
-
-            /*
-              ----------------------------------------------------------
-              NOTEPAD
-              ----------------------------------------------------------
-            */
 
             notepadUseMonospace = true;
             notepadFontFamily = "";
@@ -664,12 +521,6 @@
             notepadUseCompositorGap = false;
             notepadEdgeGap = 0;
 
-            /*
-              ----------------------------------------------------------
-              SOUNDS
-              ----------------------------------------------------------
-            */
-
             soundsEnabled = true;
             useSystemSoundTheme = false;
 
@@ -679,12 +530,6 @@
             soundPluggedIn = true;
 
             muteSoundsWhenMediaPlaying = true;
-
-            /*
-              ----------------------------------------------------------
-              POWER
-              ----------------------------------------------------------
-            */
 
             acMonitorTimeout = 0;
             acLockTimeout = 0;
@@ -724,12 +569,6 @@
             fadeToDpmsEnabled = true;
             fadeToDpmsGracePeriod = 5;
 
-            /*
-              ----------------------------------------------------------
-              TERMINAL / MUX
-              ----------------------------------------------------------
-            */
-
             launchPrefix = "";
 
             gtkThemingEnabled = true;
@@ -742,12 +581,6 @@
             muxUseCustomCommand = false;
             muxCustomCommand = "";
             muxSessionFilter = "";
-
-            /*
-              ----------------------------------------------------------
-              MATUGEN
-              ----------------------------------------------------------
-            */
 
             runDmsMatugenTemplates = true;
 
@@ -796,12 +629,6 @@
 
             matugenTemplateNeovimSetBackground = true;
 
-            /*
-              ----------------------------------------------------------
-              DOCK
-              ----------------------------------------------------------
-            */
-
             showDock = true;
             dockAutoHide = true;
             dockSmartAutoHide = false;
@@ -843,24 +670,12 @@
             dockTrashFileManager = "default";
             dockTrashCustomCommand = "";
 
-            /*
-              ----------------------------------------------------------
-              NOTIFICATIONS
-              ----------------------------------------------------------
-            */
-
             notificationOverlayEnabled = false;
             notificationPopupShadowEnabled = true;
             notificationPopupPrivacyMode = false;
             notificationForegroundLayers = true;
 
             modalDarkenBackground = true;
-
-            /*
-              ----------------------------------------------------------
-              LOCK SCREEN
-              ----------------------------------------------------------
-            */
 
             lockScreenShowPowerActions = true;
             lockScreenShowSystemIcons = true;
@@ -896,12 +711,6 @@
             lockScreenWallpaperPath = "";
             lockScreenWallpaperFillMode = "";
             lockScreenFontFamily = "";
-
-            /*
-              ----------------------------------------------------------
-              NOTIFICATION / OSD
-              ----------------------------------------------------------
-            */
 
             hideBrightnessSlider = false;
 
@@ -943,12 +752,6 @@
             osdPowerProfileEnabled = true;
             osdAudioOutputEnabled = true;
 
-            /*
-              ----------------------------------------------------------
-              POWER MENU
-              ----------------------------------------------------------
-            */
-
             powerActionConfirm = true;
             powerActionHoldDuration = 0.5;
 
@@ -971,12 +774,6 @@
             customPowerActionReboot = "";
             customPowerActionPowerOff = "";
 
-            /*
-              ----------------------------------------------------------
-              UPDATER
-              ----------------------------------------------------------
-            */
-
             updaterHideWidget = false;
             updaterCheckOnStart = false;
 
@@ -990,12 +787,6 @@
             updaterAllowAUR = true;
 
             updaterIgnoredPackages = [];
-
-            /*
-              ----------------------------------------------------------
-              DISPLAYS
-              ----------------------------------------------------------
-            */
 
             displayNameMode = "system";
 
@@ -1013,12 +804,6 @@
             displaySnapToEdge = true;
 
             connectedFrameBarStyleBackups = {};
-
-            /*
-              ----------------------------------------------------------
-              BAR
-              ----------------------------------------------------------
-            */
 
             barConfigs = [
               {
@@ -1147,12 +932,6 @@
               }
             ];
 
-            /*
-              ----------------------------------------------------------
-              DESKTOP CLOCK
-              ----------------------------------------------------------
-            */
-
             desktopClockEnabled = false;
             desktopClockStyle = "analog";
             desktopClockTransparency = 0.8;
@@ -1186,12 +965,6 @@
             desktopClockHeight = 180;
 
             desktopClockDisplayPreferences = [ "all" ];
-
-            /*
-              ----------------------------------------------------------
-              SYSTEM MONITOR
-              ----------------------------------------------------------
-            */
 
             systemMonitorEnabled = false;
             systemMonitorShowHeader = true;
@@ -1248,24 +1021,11 @@
 
             systemMonitorVariants = [];
 
-            /*
-              ----------------------------------------------------------
-              DESKTOP WIDGETS
-              ----------------------------------------------------------
-            */
-
             desktopWidgetPositions = {};
             desktopWidgetGridSettings = {};
 
-            # These are [] in your original JSON, not {}
             desktopWidgetInstances = [];
             desktopWidgetGroups = [];
-
-            /*
-              ----------------------------------------------------------
-              BUILT-IN PLUGINS
-              ----------------------------------------------------------
-            */
 
             builtInPluginSettings = {
               dms_settings_search = {
@@ -1291,12 +1051,6 @@
 
             launcherPluginVisibility = {};
             launcherPluginOrder = [];
-
-            /*
-              ----------------------------------------------------------
-              FRAME
-              ----------------------------------------------------------
-            */
 
             frameEnabled = false;
             frameThickness = 16;
@@ -1325,6 +1079,6 @@
             configVersion = 13;
           };
         };
-      });
-    };
+    });
+  };
 }
