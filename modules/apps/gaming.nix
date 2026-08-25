@@ -1,6 +1,9 @@
 { self, inputs, ... }: {
   flake.homeModules.apps.gaming = { pkgs, lib, config, ... }:
   let
+    gamesDir = "${config.home.homeDirectory}/Games";
+    shaderCacheDir = "${gamesDir}/.cache/nv-shaders";
+
     gamescopeFhd = pkgs.writeShellScriptBin "gamescope-fhd" ''
       exec ${pkgs.gamescope}/bin/gamescope -W 1920 -H 1080 -f --adaptive-sync -- "$@"
     '';
@@ -8,22 +11,52 @@
     gamescopeFsr = pkgs.writeShellScriptBin "gamescope-fsr" ''
       exec ${pkgs.gamescope}/bin/gamescope -w 1600 -h 900 -W 1920 -H 1080 -F fsr -f --adaptive-sync -- "$@"
     '';
+
+    launchers = with pkgs; [ lutris heroic ];
+    protonTooling = with pkgs; [ umu-launcher protonup-qt winetricks protontricks ];
+    overlayTooling = [ pkgs.gamescope gamescopeFhd gamescopeFsr ];
+
+    mangoHudSettings = {
+      legacy_layout = false;
+      horizontal = true;
+      hud_compact = true;
+      round_corners = 10;
+      background_alpha = 0.45;
+      font_size = 20;
+
+      fps = true;
+      frametime = true;
+      cpu_stats = true;
+      cpu_temp = true;
+      cpu_load_change = true;
+      gpu_stats = true;
+      gpu_temp = true;
+      gpu_load_change = true;
+      ram = true;
+      vram = true;
+
+      position = "top-left";
+
+      background_color = "1a1a2e";
+      text_color = "ffffff";
+      gpu_color = "4fd1c5";
+      cpu_color = "63b3ed";
+      vram_color = "b794f4";
+      ram_color = "f6ad55";
+      frametime_color = "68d391";
+    };
   in {
-    home.packages = with pkgs; [
-      lutris
-      heroic
-      umu-launcher
-      protonup-qt
-      winetricks
-      protontricks
-      gamescope
-      gamescopeFhd
-      gamescopeFsr
-    ];
+    home.packages = launchers ++ protonTooling ++ overlayTooling;
 
-    home.file."Games/.keep".text = "";
+    home.file = {
+      "Games/.keep".text = "";
+      "Games/.cache/nv-shaders/.keep".text = "";
+    };
 
-    home.sessionVariables.WINEPREFIX = "${config.home.homeDirectory}/Games/.wineprefix";
+    home.sessionVariables = {
+      WINEPREFIX = "${gamesDir}/.wineprefix";
+      __GL_SHADER_DISK_CACHE_PATH = shaderCacheDir;
+    };
 
     xdg.configFile."lutris/runners/wine.yml" = {
       force = true;
@@ -32,40 +65,12 @@
 
     programs.mangohud = {
       enable = true;
-      settings = {
-        legacy_layout = false;
-        horizontal = true;
-        hud_compact = true;
-        round_corners = 10;
-        background_alpha = 0.45;
-        font_size = 20;
-
-        fps = true;
-        frametime = true;
-        cpu_stats = true;
-        cpu_temp = true;
-        cpu_load_change = true;
-        gpu_stats = true;
-        gpu_temp = true;
-        gpu_load_change = true;
-        ram = true;
-        vram = true;
-
-        position = "top-left";
-
-        background_color = "1a1a2e";
-        text_color = "ffffff";
-        gpu_color = "4fd1c5";
-        cpu_color = "63b3ed";
-        vram_color = "b794f4";
-        ram_color = "f6ad55";
-        frametime_color = "68d391";
-      };
+      settings = mangoHudSettings;
     };
 
     home.activation.gamesBookmark = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       BOOKMARKS="$HOME/.config/gtk-3.0/bookmarks"
-      GAMES_URI="file://$HOME/Games Games"
+      GAMES_URI="file://${gamesDir} Games"
       $DRY_RUN_CMD mkdir -p "$(dirname "$BOOKMARKS")"
       $DRY_RUN_CMD touch "$BOOKMARKS"
       grep -qxF "$GAMES_URI" "$BOOKMARKS" 2>/dev/null || $DRY_RUN_CMD sh -c "printf '%s\n' \"$GAMES_URI\" >> \"$BOOKMARKS\""
