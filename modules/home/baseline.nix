@@ -1,30 +1,37 @@
 { self, inputs, ... }: {
-  flake.homeModules.baseline = { pkgs, ... }: {
+  flake.homeModules.baseline = { pkgs, vayoriTheme, ... }:
+  let theme = vayoriTheme; in
+  {
     gtk = {
       enable = true;
 
       iconTheme = {
-        name = "Tela-circle";
-        package = pkgs.tela-circle-icon-theme;
+        name = theme.iconTheme;
+        package = theme.iconPackage;
       };
 
       cursorTheme = {
-        name = "Bibata-Modern-Ice";
-        package = pkgs.bibata-cursors;
-        size = 24;
+        name = theme.cursorTheme;
+        package = theme.cursorPackage;
+        size = theme.cursorSize;
+      };
+
+      font = {
+        name = theme.font;
+        size = theme.fontSize;
       };
     };
     home.pointerCursor = {
       enable = true;
       gtk.enable = true;
 
-      package = pkgs.bibata-cursors;
-      name = "Bibata-Modern-Ice";
-      size = 24;
+      package = theme.cursorPackage;
+      name = theme.cursorTheme;
+      size = theme.cursorSize;
     };
     qt = {
       enable = true;
-      platformTheme.name = "qtct"; 
+      platformTheme.name = "qtct";
       style.name = "kvantum";
     };
 

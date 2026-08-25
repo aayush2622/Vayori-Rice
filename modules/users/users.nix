@@ -73,7 +73,7 @@
 
       home-manager.useGlobalPkgs = true;
       home-manager.useUserPackages = true;
-      home-manager.extraSpecialArgs = { inherit inputs self; };
+      home-manager.extraSpecialArgs = { inherit inputs self; vayoriTheme = config.vayori.theme; };
 
       home-manager.users = lib.mapAttrs (name: u: { ... }: {
         imports = [

@@ -2,6 +2,7 @@
 
 {
   flake.nixosModules.dms = { pkgs, lib, config, ... }:
+  let theme = config.vayori.theme; in
   {
     home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
         imports = [
@@ -493,8 +494,8 @@
             launcherLogoContrast = 1;
             launcherLogoSizeOffset = 0;
 
-            fontFamily = "Inter Variable";
-            monoFontFamily = "Fira Code";
+            fontFamily = theme.font;
+            monoFontFamily = theme.font;
 
             fontWeight = 400;
             fontScale = 1;

@@ -1,16 +1,18 @@
 { self, inputs, ... }: {
-  flake.nixosModules.fonts = { pkgs, ... }: {
+  flake.nixosModules.fonts = { pkgs, config, ... }:
+  let theme = config.vayori.theme; in
+  {
     fonts.packages = with pkgs; [
       inter
       noto-fonts
       noto-fonts-color-emoji
-      nerd-fonts.jetbrains-mono
+      theme.fontPackage
       material-symbols
     ];
 
     fonts.fontconfig.defaultFonts = {
-      sansSerif = [ "JetBrainsMono Nerd Font" "Inter" "Noto Sans" ];
-      monospace = [ "JetBrainsMono Nerd Font" ];
+      sansSerif = [ theme.font ];
+      monospace = [ theme.font ];
       emoji = [ "Noto Color Emoji" ];
     };
   };

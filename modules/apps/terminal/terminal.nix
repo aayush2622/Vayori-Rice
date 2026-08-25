@@ -1,11 +1,13 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps.terminal = { pkgs, ... }: {
+  flake.homeModules.apps.terminal = { pkgs, vayoriTheme, ... }:
+  let theme = vayoriTheme; in
+  {
     programs.kitty = {
       enable = true;
 
       font = {
-        name = "JetBrainsMono Nerd Font";
-        size = 11;
+        name = theme.font;
+        size = theme.fontSize;
       };
 
       settings = {

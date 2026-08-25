@@ -56,6 +56,46 @@ Two flake-parts option namespaces get populated across all those files:
 
 ## `modules/hosts/<name>/host.nix`
 
+**`vayori.theme`** is declared right here, inline in `host.nix`'s own
+module - deliberately *not* split into a separate shared file the way
+`vayori.users`/`vayori.apps` are (those live in `users.nix` because
+they're genuine cross-host framework; theme is a per-host preference, and
+this repo only has the one host). `options.vayori.theme = lib.mkOption {
+type = lib.types.submodule { ... }; };` declares a submodule with sane
+defaults baked in (JetBrainsMono Nerd Font, Bibata-Modern-Ice,
+Tela-circle - what this host actually uses), so **a host doesn't have to
+set anything to get a working theme, and overriding is a single line**
+inside `config`: `vayori.theme.font = "Fira Code";` changes it everywhere
+at once - fontconfig, GTK, kitty, and DMS all read from the same option,
+no separate edits. Each field is independently overridable - override
+just `vayori.theme.cursorSize` without redeclaring the whole thing.
+
+**Reaching every consumer**: NixOS-level modules (`fonts.nix`, `dms.nix`,
+`host.nix` itself) just read `config.vayori.theme.*` directly - it's a
+normal option, always available via `config` regardless of which file
+declared it, no special plumbing needed. home-manager per-app modules
+(`baseline.nix`, `terminal.nix`) are the one place that still needs help:
+home-manager's per-user submodules are a *separate* module system
+instantiation that never sees the parent NixOS `config` at all -
+`users.nix` re-exports the resolved attrset into
+`home-manager.extraSpecialArgs = { vayoriTheme = config.vayori.theme; ... };`,
+which is what makes it available to every home-manager app module.
+
+Left out on purpose: the SDDM greeter's bundled font and GRUB's theme
+package aren't wired to `vayori.theme` - see
+[fonts.nix / portals.nix](#modulesfeaturesfontsnix--portalsnix) for why.
+
+**A module can't mix `options.x = ...` with implicit-config keys at the
+same level.** Once `host.nix`'s inline module declares
+`options.vayori.theme`, every other setting in that same module (
+`vayori.users`, `networking.hostName`, all of it) has to move under an
+explicit `config = { ... };` - the usual shorthand where any non-reserved
+top-level key is implicitly treated as config only applies when the
+module has *no* `options`/`config` key at all. Skipping this produces
+`Module '...' has an unsupported attribute 'boot'. ... introducing a
+top-level 'config' or 'options' attribute` - a real error hit while
+building this option inline, not a hypothetical.
+
 **A bare inline lambda module right after a `path` list element parses as
 function application, not two list elements.** Concretely:
 
@@ -82,17 +122,51 @@ local NixOS manual + `nixos-help`, which saves real build time and store
 space; `man configuration.nix` still works, and `nixos-option`/the online
 search still cover option docs.
 
-**Cursor on the SDDM login screen**: `services.displayManager.sddm`'s
-Wayland greeter runs under Weston as its own systemd service
-(`display-manager.service`), so it never sees `environment.sessionVariables`
-(that's only exported to login shells via PAM, i.e. *after* you're already
-logged in). Without `XCURSOR_THEME`/`XCURSOR_SIZE` in the service's own
-environment, Weston has no cursor theme to load and draws no pointer at
-all - hence `systemd.services.display-manager.environment` is set
-separately, with the same values, specifically for this. The cursor
-package (`bibata-cursors`) also has to be in `environment.systemPackages`
-(system-wide), not just pulled in via home-manager for a user - SDDM runs
-before any user session exists.
+**Cursor on the SDDM login screen** - three separate gaps, each real and
+independently confirmed, not guessed at:
+
+1. `services.displayManager.sddm`'s Wayland greeter runs under Weston as
+   its own systemd service (`display-manager.service`), so it never sees
+   `environment.sessionVariables` (only exported to login shells via PAM,
+   *after* you're already logged in) - hence
+   `systemd.services.display-manager.environment` is set separately, with
+   the same values, specifically for Weston.
+2. **Weston itself doesn't reach the greeter's own process environment.**
+   Traced through SDDM's actual C++ source (`Backend.cpp`): when SDDM
+   spawns the greeter, it explicitly re-applies `GreeterEnvironment` on
+   top of whatever the greeter would otherwise inherit, specifically when
+   `XDG_SESSION_CLASS == "greeter"` - meaning env vars set at the Weston/
+   systemd-service level are **not** guaranteed to reach the greeter
+   client itself. `services.displayManager.sddm.settings.General.GreeterEnvironment`
+   (a comma-separated `VAR=value` string, confirmed from source - not the
+   NixOS module's usual attrset shape) is the documented, direct
+   mechanism for this.
+3. **NixOS isn't FHS - `/usr/share/icons` doesn't exist.** Xcursor's
+   default search path falls back to that hardcoded path, and to
+   `$XDG_DATA_DIRS/icons`, when `XCURSOR_PATH` isn't set - on NixOS
+   neither resolves to anything useful for a system-level service like
+   SDDM (no equivalent of a normal login session's `XDG_DATA_DIRS`,
+   which usually comes from PAM/systemd user setup this process never
+   goes through). Getting `XCURSOR_THEME` right doesn't matter if nothing
+   can locate the actual theme files - `XCURSOR_PATH` is set explicitly
+   to `${config.vayori.theme.cursorPackage}/share/icons`, the exact
+   store path, removing all ambiguity about search-path fallbacks.
+   `config.vayori.theme.cursorPackage` also has to be in
+   `environment.systemPackages` (system-wide), not just pulled in via
+   home-manager for a user - SDDM runs before any user session exists.
+
+All three were verified against source (Weston's own `libweston`/
+`kiosk-shell`/`desktop-shell` - confirmed zero server-side cursor
+fallback either way, cursor rendering is 100% client-responsibility) and
+against real evaluated config values, and the built VM was actually
+booted and screenshotted via QMP to check. **Caveat worth knowing**:
+QEMU's `screendump` captures the primary framebuffer surface and is a
+known-unreliable way to check for a cursor - many DRM/KMS drivers
+composite the pointer via a separate hardware cursor plane that
+`screendump` doesn't necessarily include, so "not visible in a
+screendump" isn't conclusive proof it's still broken on real display
+output (VNC/SPICE/real hardware). All three fixes above are independently
+correct regardless of what the screendump did or didn't show.
 
 **Apps** (`vayori.apps`): pick from whatever file names exist under
 `modules/apps/`. This is the one setting a new machine's config usually
@@ -133,13 +207,53 @@ The Nvidia block itself, for reference:
   launched explicitly with `nvidia-offload <cmd>` (best battery life). For
   "dGPU renders everything, always on" instead, swap for `prime.sync.enable
   = true` and drop the two `powerManagement` lines.
-- `services.asusd` - ASUS ROG GPU switching (supergfxctl). If the dGPU
-  doesn't show up in `lspci` at all, supergfxctl likely has it fully
-  powered off in Integrated mode - run `supergfxctl -m Hybrid` (needs a
-  reboot) and `supergfxctl -g` to check the current mode.
+- **`services.asusd` and `services.supergfxd` are two entirely separate
+  daemons**, despite both being part of the asus-linux project and both
+  living in `nixpkgs/nixos/modules/services/hardware/`.
+  `services.asusd` is `asusctl` - keyboard LEDs, fan curves, battery
+  charge limits. **It does not touch GPU switching at all.** GPU mux
+  switching (Integrated/Hybrid/dGPU) is `supergfxctl`, a completely
+  different binary/daemon/systemd unit, gated behind its own
+  `services.supergfxd.enable`. Enabling only `services.asusd` - which
+  this repo did for a while - leaves `supergfxd` never actually running,
+  so nothing ever issues the mux switch back to Hybrid: whatever state
+  the firmware/EC left the dGPU in (commonly fully powered off, to save
+  battery) just persists forever, indistinguishable from "the dGPU is
+  properly connected but the nvidia driver still can't see anything" -
+  which looks exactly like the black-screen-in-VM symptom above, but
+  isn't fixable the same way, because here the GPU really is physically
+  off, not merely mismatched with the display backend.
+  `services.supergfxd.settings.mode = "Hybrid"` (confirmed against
+  supergfxctl's own Rust source, `src/config.rs` - a plain JSON file at
+  `/etc/supergfxd.conf`, `mode` matching the `GfxMode` enum variant name
+  exactly) makes this declarative instead of a one-time
+  `supergfxctl -m Hybrid && reboot` that has to be remembered and redone
+  on every fresh install. `supergfxctl -g` still checks the current mode
+  live if something ever looks off.
 - `systemd.services.supergfxd.path = [ pkgs.pciutils ]` works around a
   known nixpkgs bug where supergfxd can't find the dGPU without pciutils
   on its `PATH` - [NixOS/nixpkgs#239059](https://github.com/NixOS/nixpkgs/issues/239059).
+  This override was silently inert before `services.supergfxd.enable`
+  was actually set - overriding a systemd unit that doesn't exist yet is
+  accepted without error, it just has nothing to attach to.
+
+**`virtualisation.vmVariant`** fixes niri showing a black screen under
+`nixos-rebuild build-vm`: that command evaluates this *exact* config,
+Nvidia driver stack included, but QEMU has no Nvidia GPU for it to bind
+to, so niri never gets a working DRM device. `services.xserver.videoDrivers`
+gates NixOS's entire Nvidia module internally via `mkIf (elem "nvidia"
+... videoDrivers)`, so clearing just that one option for the VM build is
+enough to disable the whole stack and let niri fall back to the generic
+`modesetting` driver, which QEMU's virtual GPU works with out of the box.
+`virtualisation.vmVariant.*` is the standard NixOS mechanism for this -
+config nested under it only ever applies to `system.build.vm`/
+`nixos-rebuild build-vm`, never to the real system (confirmed by
+evaluating both: the real config keeps `videoDrivers = [ "nvidia" ]`,
+only `config.virtualisation.vmVariant.services.xserver.videoDrivers`
+- note: no `.config` in the middle, that option's value *is* the merged
+config directly - changes). `services.asusd`/`services.supergfxd` are
+disabled the same way for the VM, since there's no ASUS hardware to
+switch there either.
 
 ## `modules/users/users.nix`
 
@@ -252,13 +366,127 @@ your first `nixos-rebuild switch` - if GRUB doesn't pick it up, run
 
 ## `modules/apps/zen-browser.nix`
 
+- **Finding the real active profile**: `find` globs on the profile
+  directory *name* (`*.Default Profile`, `*Default (release)`) are
+  fragile and were wrong in an earlier version of this file - on the
+  actual reference machine, the real active profile is
+  `~/.zen/<hash>.Default (release)`, while `~/.zen/<hash>.Default
+  Profile` (matching the old glob) is a separate, empty, unused profile
+  from a previous install. `findZenProfileDir` instead parses
+  `profiles.ini`'s `[InstallXXXX] Default=` line - the actual value
+  Zen/Firefox itself uses to pick a profile on launch - rather than
+  guessing from directory naming, which apparently varies. If a future
+  Zen install still isn't found, check `~/.zen/profiles.ini` (or the
+  Flatpak equivalent) for the `[Install...]` section directly.
 - `zenPrefs`: check these out at `about:config`.
-- Adding an extension: find the short ID in the addon's `addons.mozilla.org`
-  URL, then look up its actual `guid` at
-  `https://addons.mozilla.org/api/v5/addons/addon/!SHORT_ID!/`.
-- Noctalia can also theme Zen directly (Settings -> Color Scheme ->
-  Templates -> Zen Browser) via CSS injection - see
-  <https://docs.noctalia.dev/v4/theming/program-specific/zenbrowser/>.
+- **`zenUserPrefs`/`zenUserJs`**: the actual look-and-feel state
+  (compact mode, floating urlbar, hidden sidebar, and - critically -
+  every installed mod's *tuned* preference values: background image,
+  blur amount, colors, custom font) extracted directly from a real
+  running profile's `prefs.js`, not guessed at or left to each mod's own
+  defaults. Written to a declarative `user.js` in the profile (same
+  `pkgs.writeText` + `ln -sf` pattern as `userChrome.css`) rather than
+  locked via `zenPrefs`/`lockPref`, on purpose: these are values you'd
+  reasonably keep tweaking live through Zen's own Settings UI (background
+  image, blur amount, ...), and `lockPref` would freeze them forever.
+  `user.js` gets re-applied on every browser launch, so - same trade-off
+  already accepted for DMS's `settings.json` and the Zen Mods registry -
+  a live tweak through the UI resets back to what's declared here on the
+  next restart, not just the next `nixos-rebuild switch`. Left out on
+  purpose: Firefox Sync/`identity.fxaccounts.*` state (account-tied, not
+  config), `network.proxy.*` (real IP visible in the source profile,
+  and inactive anyway - `network.proxy.type` was `0`/direct), and
+  `browser.backup.location` (hardcodes the source machine's home path,
+  which may not match whatever username ends up used here).
+- **Adding an extension** (`zenExtensions`): find the `slug` in the
+  addon's `addons.mozilla.org` URL, then look up its actual `guid` at
+  `https://addons.mozilla.org/api/v5/addons/addon/!SLUG!/` (or the search
+  endpoint, `.../api/v5/addons/search/?q=!NAME!&app=firefox`, if you don't
+  have the exact slug - useful since some extensions have several
+  same-named listings from different authors; match on `summary` text and
+  `average_daily_users` to find the real one).
+  **Why both `slug` and `guid`, and why hardcoded rather than resolved
+  automatically like `zenMods` are**: `slug` is AMO's URL-friendly listing
+  name (used for the `.../downloads/latest/<slug>/latest.xpi` download
+  URL) and can be renamed by the author; `guid` is the extension's actual
+  manifest id (`browser_specific_settings.gecko.id`), fixed forever, which
+  is what Firefox's `ExtensionSettings` policy keys on to match an
+  installed extension to its policy entry - neither can substitute for
+  the other, and Firefox's policy schema requires the real `guid` as the
+  key, full stop. Unlike `zenMods`' registry (which lives in the mutable
+  `$HOME` profile and gets populated by an *activation script*, free to
+  hit the network at apply-time), `ExtensionSettings` gets baked into
+  `policies.json` **inside the immutable Nix-built package itself** at
+  eval/build time - and flakes evaluate purely, without network access,
+  specifically so the same config produces the same result on any machine
+  regardless of network state. There's no build-time equivalent of "just
+  curl the AMO API to resolve a slug to its guid" available here.
+- **Dynamic wallpaper-matched theming**: Zen doesn't support Pywalfox or
+  Firefox theme extensions - theming works through `userChrome.css`
+  instead. DMS renders `~/.config/DankMaterialShell/zen.css` from the
+  current wallpaper's palette (`matugenTemplateZenBrowser = true`, in
+  [dms.nix](#modulesfeaturesdmsnix)); `home.activation.zenBrowserConfig`
+  here symlinks that file to `chrome/userChrome.css` in whichever Zen
+  profile it finds (native `~/.zen` or Flatpak - see the profile
+  discovery note below).
+  `toolkit.legacyUserProfileCustomizations.stylesheets` (required for any
+  `userChrome.css` to take effect at all) is locked on via `zenPrefs`, so
+  there's no manual `about:config` step. The one thing that *can't* be
+  done at build time: the profile directory itself doesn't exist until
+  Zen has been launched once - if theming isn't applied yet, launch Zen
+  once, then re-run `nixos-rebuild switch` (or `home-manager switch`) so
+  the activation script finds the now-existing profile.
+- **Zen Mods** (`zenMods`, also inside `home.activation.zenBrowserConfig`
+  - one activation script handles theming, `user.js`, and mods together,
+  since they all need the same resolved `$PROFILE_DIR`) are a completely
+  separate system from the `userChrome.css` theming above - traced
+  through Zen's actual source
+  (`src/zen/mods/ZenMods.mjs`/`ZenStyleSheetCache.h` in
+  [zen-browser/desktop](https://github.com/zen-browser/desktop)) rather
+  than guessed at, since getting the storage format wrong would just
+  silently do nothing:
+  - `<profile>/zen-themes.json` is the registry - a JSON *object* keyed
+    by mod `id` (not an array), each value the mod's metadata plus
+    `enabled`.
+  - `zenMods` in the Nix file is deliberately just a `name -> id` map,
+    nothing richer - unlike `zenExtensions`, this one *can* be dynamic.
+    [zen-browser/theme-store](https://github.com/zen-browser/theme-store)
+    publishes `themes.json`, a single index with every mod's full
+    metadata (name, description, author, version, tags, style/readme/
+    image URLs, ...), keyed by the same `id`. The activation script
+    fetches that index live, `jq`-filters it down to just the ids in
+    `zenMods`, stamps `enabled: true` onto each, and writes the result
+    straight to `<profile>/zen-themes.json` - no metadata is hand-copied
+    into this repo at all, so it can't drift out of date the way a
+    hardcoded copy would. This works here (and not for `zenExtensions`)
+    because it happens at *activation* time, in the user's mutable
+    `$HOME`, which is allowed to touch the network - `zenExtensions`
+    bakes into the immutable Nix-built package itself at eval/build
+    time, where flakes deliberately evaluate without network access.
+  - Each mod's actual `chrome.css` (and `preferences.json`) gets fetched
+    with `curl` into `<profile>/chrome/zen-themes/<id>/` separately -
+    genuinely apart from `userChrome.css`, since Zen loads
+    `zen-themes.css` natively via its own stylesheet cache, not through
+    the chrome CSS Zen's own `#rebuildModsStylesheet` reads at startup.
+    Fetched only if the file doesn't already exist
+    (`[ -f ... ] || curl ...`), so this doesn't hit the network on every
+    single `nixos-rebuild switch` - only once per mod, and it self-heals
+    if a file goes missing. `preferences.json` is attempted for every
+    mod unconditionally (harmless 404 + `|| true` for the ones without
+    one - `curl -f` doesn't write anything to disk on a failed request).
+  - **One broken mod can take down every mod.** Zen's own compile step
+    (`#writeStylesheet` in `ZenMods.mjs`) loops over enabled mods and
+    calls `IOUtils.readUTF8` on each one's `chrome.css` with no
+    per-mod try/catch - if that file is missing for even one enabled
+    mod, the whole rebuild throws, caught by one outer try/catch in
+    `init()`, and *no* mod's CSS gets applied that session. One entry
+    from the original request - "Remove Browser Padding"
+    (`680424a8-...`) - is missing from `theme-store`'s `themes.json`
+    entirely (confirmed directly against the index, not just a broken
+    URL guess), so it's simply not in `zenMods` here: fetching the live
+    index naturally omits it, rather than needing an explicit
+    `enabled = false` override the way a hardcoded list would have.
+    Add it back to `zenMods` if/when upstream restores it.
 
 ## `modules/apps/nautilus.nix`
 
@@ -309,3 +537,21 @@ the one piece of the rice nobody opts out of.
 - `xdg-desktop-portal-gnome`: file pickers, screenshots, screencast (works
   well with niri).
 - `xdg-desktop-portal-gtk`: GTK file chooser used by Nautilus & friends.
+
+**The system font everywhere it's set declaratively comes from
+`vayori.theme.font`** (see [host.nix](#moduleshostsnamehostnix)):
+`fontconfig.defaultFonts.sansSerif` (fonts.nix), GTK app UI text
+(`gtk.font`, baseline.nix - not set before `vayori.theme` existed, GTK
+apps used to fall back to whatever the theme's own default was), kitty, and
+DMS's own shell UI (`fontFamily`/`monoFontFamily`, dms.nix - previously
+independent hardcoded values, `Inter Variable`/`Fira Code`). Left alone on
+purpose: the SDDM greeter's
+clock/labels use a bundled `Itim-Regular.ttf` file shipped inside the
+"women-umbrella" theme itself
+([features/sddm/Theme/font/](../modules/features/sddm/Theme/font/)), not
+a system fontconfig reference - switching that font means shipping a
+different `.ttf` file in the theme, a separate (larger) change from a
+settings tweak. Qt apps aren't covered either: their font comes from
+qt6ct's own config, which Noctalia/DMS's matugen templates already manage
+(`matugenTemplateQt6ct`/`matugenTemplateQt5ct`) - hand-editing it here
+would fight that.
