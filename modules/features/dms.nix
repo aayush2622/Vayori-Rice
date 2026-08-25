@@ -48,6 +48,8 @@
                 overlayOpacity = 84;
               };
             };
+
+            dankAsusControlCenter.enable = true;
           };
 
           settings = {
@@ -861,6 +863,11 @@
                     showBatteryTime = false;
                     batteryPillStyle = false;
                     batteryPillPercentSign = false;
+                  }
+
+                  {
+                    id = "dankAsusControlCenter";
+                    enabled = true;
                   }
 
                   "controlCenterButton"

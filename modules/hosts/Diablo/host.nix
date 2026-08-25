@@ -87,6 +87,7 @@
             "android-studio"
             "spicetify"
             "dev-tools"
+            "gaming"
           ];
 
           nix.settings.experimental-features = [ "nix-command" "flakes" ];
@@ -129,10 +130,11 @@
           };
 
           hardware.bluetooth.enable = true;
-          services.power-profiles-daemon.enable = true;
           services.upower.enable = true;
 
           services.printing.enable = true;
+
+          programs.gamemode.enable = true;
 
           services.pulseaudio.enable = false;
           security.rtkit.enable = true;

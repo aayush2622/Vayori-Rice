@@ -25,6 +25,7 @@ deeper reference, not the walkthrough.
 - [modules/apps/nautilus.nix](#modulesappsnautilusnix)
 - [modules/apps/android-studio.nix](#modulesappsandroid-studionix)
 - [modules/apps/dev-tools.nix](#modulesappsdev-toolsnix)
+- [modules/apps/gaming.nix](#modulesappsgamingnix)
 - [modules/apps/terminal/terminal.nix](#modulesappsterminalterminalnix)
 - [modules/home/baseline.nix](#moduleshomebaselinenix)
 - [modules/features/fonts.nix / portals.nix](#modulesfeaturesfontsnix--portalsnix)
@@ -237,6 +238,17 @@ The Nvidia block itself, for reference:
   This override was silently inert before `services.supergfxd.enable`
   was actually set - overriding a systemd unit that doesn't exist yet is
   accepted without error, it just has nothing to attach to.
+- **`services.power-profiles-daemon` is deliberately *not* enabled**
+  (removed from `host.nix`) once `services.asusd` is - `asusd` itself
+  implements the same `org.freedesktop.UPower.PowerProfiles` D-Bus
+  interface to expose its Quiet/Balanced/Performance profiles, so
+  running `power-profiles-daemon` alongside it is a straight name
+  collision on that bus name: whichever service starts second fails to
+  claim it, and profile switching silently stops working through
+  *whichever* of the two lost. `asusctl`'s profiles are the
+  ROG-specific ones anyway (tied into fan curves/EC behavior, not just
+  a generic CPU governor swap), so there's no reason to keep the
+  generic daemon running in parallel.
 
 **`virtualisation.vmVariant`** fixes niri showing a black screen under
 `nixos-rebuild build-vm`: that command evaluates this *exact* config,
@@ -332,6 +344,40 @@ power, matugen (per-app template toggles - this is what themes niri's
 window borders too, see below), dock, notifications, lock screen,
 notification/OSD, power menu, updater, displays, desktop clock, system
 monitor, desktop widgets, frame.
+
+**Third-party plugins**: `inputs.dms-plugin-registry.nixosModules.default`
+auto-generates a `programs.dank-material-shell.plugins.<id>` option for
+*every* plugin in [AvengeMedia/dms-plugin-registry](https://github.com/AvengeMedia/dms-plugin-registry)
+(each `mkDefault false` - opt in per plugin, nothing installs by
+default just from importing the registry). `<id>` is the plugin's own
+`plugin.json` `id` field, not the registry's per-file slug (e.g. the
+registry file is `shazzaam7-dankasuscontrol.json`, but the option is
+`plugins.dankAsusControlCenter`, matching that plugin's `plugin.json`).
+Enabling a `"type": "widget"` plugin only builds/installs it and flips
+it on in `plugin_settings.json` - it still needs adding to a bar
+section (`leftWidgets`/`centerWidgets`/`rightWidgets`) with that same
+`id` string to actually show up, exactly like a built-in widget (see
+`dankAsusControlCenter` under `rightWidgets` below).
+
+- **`dankAsusControlCenter`**: a DankBar popout for `asusctl`
+  (Quiet/Balanced/Performance power profiles, battery charge limit/One
+  Shot) and `supergfxctl` (Integrated/Hybrid/Dedicated GPU mode) -
+  [shazzaam7/DankAsusControl](https://github.com/shazzaam7/DankAsusControl),
+  a continuation of the original
+  [pseudofractal/AsusControl](https://github.com/pseudofractal/AsusControl)
+  (same registry, id `asusControlCenter`, if this one ever goes
+  unmaintained). Its only real dependencies - `asusctl`, `supergfxctl`,
+  `upower` - are already satisfied: `services.asusd`/`services.supergfxd`
+  (see [_hardware.nix](#moduleshostsname_hardwarenix)) each add their
+  own CLI to `environment.systemPackages` automatically, and
+  `services.upower.enable = true` is already set in `host.nix`.
+  Switching GPU mode needs a session logout to fully apply (a
+  supergfxd/kernel-driver constraint, not a plugin limitation) - the
+  widget detects niri specifically and handles this itself, warning
+  first. Not verified against real ASUS hardware from this sandbox (no
+  physical `/sys/kernel/supergfxd` device to test against) - if the
+  popout can't reach the daemons at all, check `supergfxctl -g` /
+  `asusctl -v` work from a plain terminal first.
 
 ## `modules/features/niri.nix`
 
@@ -585,6 +631,123 @@ user's `extraGroups` is optional compatibility, not required.
 `git` itself isn't listed here - it's already in the base
 `environment.systemPackages` (`host.nix`), since flakes need it
 system-wide regardless of which apps are picked.
+
+## `modules/apps/gaming.nix`
+
+One file, one `vayori.apps` toggle, for everything Windows-gaming
+related - `lutris` + `heroic` (Epic/GOG/Amazon Prime Gaming) as the two
+launchers, plus the shared tooling both use. Deliberately minimal:
+`umu-launcher` (gives Lutris a native, Steam-free "Proton" runner - it
+downloads/manages GE-Proton builds itself, no separate tool needed) +
+`protonup-qt` (a GUI fallback for managing Proton/Wine-GE versions by
+hand) + `winetricks`/`protontricks` for prefix dependency installs (VC
+redist, DirectX, dotnet, ...). No Steam - `proton-ge-bin` in nixpkgs
+deliberately refuses to install outside
+`programs.steam.extraCompatPackages` (evaluates to a text file that
+just says so), so it's not usable here; `umu-launcher` is the standard
+Steam-free substitute.
+
+- **One games folder**: `home.file."Games/.keep"` creates `~/Games` -
+  drop any installer/game folder there. Not managed further by Nix
+  beyond existing (installers/saves/prefixes are exactly the kind of
+  frequently-changing, per-game state that doesn't belong in a Nix
+  store).
+- **One shared Wine prefix, not "no 100 of wine prefix only 1 is fine"**
+  (verbatim ask): `WINEPREFIX` is set to `~/Games/.wineprefix` via
+  `home.sessionVariables`, so any *plain* `wine`/`winetricks` invocation
+  (e.g. `wine installer.exe` from a terminal, or a file manager's "Open
+  With Wine") reuses one prefix instead of creating a fresh
+  `~/.wine`-style one per run. This only covers raw Wine usage, though -
+  **Lutris/Heroic manage their own per-game prefixes independently of
+  `$WINEPREFIX`**, by design (each game gets its own entry in their own
+  config/database, not something this repo declares). To point a
+  Lutris game at the shared prefix instead of its default per-game one,
+  set that same `~/Games/.wineprefix` path in that game's own
+  Configure → Game options → "Wine prefix" field in the Lutris UI - a
+  per-game runtime choice, not something Nix can enforce from outside.
+- **`gamescope-fhd`/`gamescope-fsr`**: two `pkgs.writeShellScriptBin`
+  wrappers over the bare `gamescope` package (still installed
+  unwrapped too, for anything these two presets don't cover), flags
+  confirmed against `gamescope --help` rather than guessed:
+  - `gamescope-fhd -- %command%`: plain borderless-fullscreen 1920x1080
+    (`-W`/`-H` = *output* size), `--adaptive-sync` - use this for games
+    that fight niri over fullscreen/window sizing, no upscaling
+    involved.
+  - `gamescope-fsr -- %command%`: renders internally at 1600x900
+    (`-w`/`-h` = *nested/game* size, distinct from `-W`/`-H`) and
+    upscales to 1920x1080 via `-F fsr` - the actual performance trade
+    the RTX 3050 benefits from on demanding titles, at some image
+    softness. Both are launch-option prefixes in Lutris/Heroic, same as
+    everything else in this section.
+- **MangoHud** (`programs.mangohud`, the home-manager module - not just
+  the bare package): `enable = true` installs it and writes
+  `~/.config/MangoHud/MangoHud.conf` from `settings`. Tuned for
+  readability without being a wall of text: `horizontal` +
+  `hud_compact` (single compact row instead of a tall stacked block),
+  `legacy_layout = false` (modern renderer), `round_corners`/
+  `background_alpha` for a translucent pill rather than a hard
+  rectangle, and a coherent teal/blue/purple accent palette per stat
+  instead of MangoHud's rather clashing defaults. Still shows fps/
+  frametime/cpu+gpu load+temp/ram/vram - nothing removed, just
+  restyled. Deliberately *not* `enableSessionWide` - that would force
+  the overlay onto every single app that links Vulkan/OpenGL, not just
+  games. Toggle it per game instead: prefix that one game's launch
+  command with `MANGOHUD=1 %command%`, or hit the in-app hotkey
+  (`Shift+F12` by default) once it's running - **except** when also
+  using one of the `gamescope-*` wrappers above, where `gamescope`'s
+  own `--mangoapp` flag is what its `--help` explicitly says to use
+  instead (`MANGOHUD=1` alongside gamescope specifically is called out
+  as the wrong combination), e.g. `gamescope-fsr --mangoapp --
+  %command%`.
+- **Lutris default runner**: `~/.config/lutris/runners/wine.yml` is
+  seeded with `wine: { version: ge-proton }` - confirmed against
+  Lutris's own source (`lutris/runners/wine.py`,
+  `GE_PROTON_LATEST = "ge-proton"`, the exact sentinel string that
+  routes a game through `umu-launcher`'s managed GE-Proton instead of
+  Lutris's own bundled Wine-GE build), so every *new* Wine/Windows game
+  added in Lutris defaults to GE-Proton without picking it manually
+  each time. `dxvk`/`vkd3d`/`esync`/`fsync`/`battleye`/`eac` are **not**
+  set here - checked Lutris's own option schema and all of them already
+  default to `true` there regardless, so declaring them would just be
+  inert noise. `force = true` like the rest of this repo's declarative
+  configs (DMS `settings.json`, Zen Mods) - a manual runner-default
+  change through Lutris's own Preferences UI resets back to this on the
+  next `nixos-rebuild switch`, the same accepted trade-off documented
+  elsewhere for exactly this reason.
+- **`home.activation.gamesBookmark`** appends `~/Games` to
+  `~/.config/gtk-3.0/bookmarks` (the file GTK3 *and* GTK4 file pickers/
+  Nautilus's sidebar both still read) if it isn't already there -
+  `grep -qxF` guards against duplicating the line on every rebuild.
+  Deliberately *append*, not `xdg.configFile`'s declarative
+  replace-or-fail: that file accumulates whatever else you drag into
+  the sidebar over time, and this repo shouldn't own/reset the whole
+  thing just to add one entry.
+- **`programs.gamemode.enable = true`** lives in `host.nix`, not here -
+  it's a system-wide daemon (`gamemoded`, a systemd *user* service that
+  a system-level module wires up: polkit rules + a `cap_sys_nice`
+  wrapper so it can renice/reclock without full root), not a per-user
+  home-manager concern. Nothing needs to reference it explicitly to use
+  it: any launcher that already runs games through `gamemoderun`
+  (Lutris does, automatically, once the daemon exists) picks it up for
+  free. `gamemoderun %command%` also works standalone as a launch-option
+  prefix if you want to combine it explicitly with the rest, e.g.
+  `gamemoderun gamescope-fsr --mangoapp -- %command%`.
+- **GPU offload (Optimus laptop only)**: none of the above make a
+  Lutris/Heroic game actually use the dGPU - on an Intel+Nvidia PRIME
+  laptop (see
+  [modules/hosts/\<name\>/_hardware.nix](#moduleshostsname_hardwarenix)'s
+  `hardware.nvidia.prime.offload`), a game launched normally runs on
+  the weaker iGPU by default. `hardware.nvidia.prime.offload.enableOffloadCmd
+  = true` (already set for Diablo) generates an `nvidia-offload` script
+  in `environment.systemPackages` for exactly this - no separate wrapper
+  needed here, NixOS's own Nvidia module already provides one. Use it
+  as a launch-option prefix the same way as the others: `nvidia-offload
+  %command%` (or chained with the rest - `nvidia-offload gamemoderun
+  %command%`). This is also exactly what the "GPU Mode" switch in the
+  `dankAsusControlCenter` DMS widget (see
+  [dms.nix](#modulesfeaturesdmsnix)) controls at the system level, if
+  you'd rather flip the whole laptop to `Integrated`/`Dedicated` than
+  offload per-launch.
 
 ## `modules/apps/terminal/terminal.nix`
 
