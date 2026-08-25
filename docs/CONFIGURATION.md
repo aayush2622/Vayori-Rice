@@ -21,6 +21,7 @@ deeper reference, not the walkthrough.
 - [modules/features/dev-system.nix](#modulesfeaturesdev-systemnix)
 - [modules/features/grub-theme.nix](#modulesfeaturesgrub-themenix)
 - [modules/apps/zen-browser.nix](#modulesappszen-browsernix)
+- [modules/apps/spicetify.nix](#modulesappsspicetifynix)
 - [modules/apps/nautilus.nix](#modulesappsnautilusnix)
 - [modules/apps/android-studio.nix](#modulesappsandroid-studionix)
 - [modules/apps/dev-tools.nix](#modulesappsdev-toolsnix)
@@ -255,6 +256,31 @@ config directly - changes). `services.asusd`/`services.supergfxd` are
 disabled the same way for the VM, since there's no ASUS hardware to
 switch there either.
 
+Clearing the Nvidia stack still left the VM stuck black after "Reached
+target Graphical Interface" - a second, separate bug, confirmed by
+logging into the VM over a bidirectional QEMU serial socket (SDDM's
+Wayland greeter has no serial/TTY output of its own, so this required
+reading `journalctl -u display-manager` as root): every process (sddm,
+weston, sddm-greeter-qt6) was alive and healthy, weston's own compositor
+even initialized OpenGL fine over `llvmpipe`, but the *greeter's* QML
+frontend (`sddm-greeter-qt6`, a separate process that talks to weston as
+a Wayland client) logged `libEGL warning: failed to get driver name for
+fd -1` then `MESA: error: ZINK: failed to choose pdev` and produced
+nothing else, ever - no crash, just a permanently blank surface. Cause:
+QEMU's `bochs-drm` device is a dumb framebuffer with no DRI2 driver, so
+a Wayland *client* requesting a hardware-accelerated EGL context (as
+opposed to weston's own server-side renderer, which talks to
+`/dev/dri/card0` directly) can't authenticate one; Mesa's automatic
+fallback to `zink` (OpenGL-over-Vulkan) then also fails because there's
+no Vulkan ICD (lavapipe) available either. Fix: force the greeter's Qt
+Quick scene graph to skip EGL/GL entirely via `QT_QUICK_BACKEND=software`
+in the VM's `GreeterEnvironment` (`_hardware.nix`, `virtualisation.vmVariant`
+only - real hardware has a proper Intel iGPU with working DRI2/dmabuf, so
+it doesn't need this and shouldn't pay the software-rendering cost).
+`GreeterEnvironment` is a single flat string option, so the VM override
+uses `lib.mkForce` to fully re-specify it (cursor vars included) rather
+than trying to merge/append onto `host.nix`'s copy.
+
 ## `modules/users/users.nix`
 
 Shared framework - defines what a `vayori.users.<name>` entry can contain
@@ -270,6 +296,12 @@ what options a user entry supports.
   etc.
 - `availableApps` is auto-discovered from `modules/apps/*.nix` - add a new
   app by dropping a file there; nothing here needs to change.
+- Every user's `home-manager-<name>.service` is given
+  `after`/`wants = [ "network-online.target" ]` here, generically for
+  all `vayori.users` - not specific to any one app module. Any app's
+  home-manager activation script that touches the network (currently
+  [zen-browser.nix](#modulesappszen-browsernix)'s mods/profile fetch) is
+  otherwise racing whatever NIC/DHCP state boot happens to be in.
 
 ## `modules/features/dms.nix`
 
@@ -366,18 +398,17 @@ your first `nixos-rebuild switch` - if GRUB doesn't pick it up, run
 
 ## `modules/apps/zen-browser.nix`
 
-- **Finding the real active profile**: `find` globs on the profile
-  directory *name* (`*.Default Profile`, `*Default (release)`) are
-  fragile and were wrong in an earlier version of this file - on the
-  actual reference machine, the real active profile is
-  `~/.zen/<hash>.Default (release)`, while `~/.zen/<hash>.Default
-  Profile` (matching the old glob) is a separate, empty, unused profile
-  from a previous install. `findZenProfileDir` instead parses
-  `profiles.ini`'s `[InstallXXXX] Default=` line - the actual value
-  Zen/Firefox itself uses to pick a profile on launch - rather than
-  guessing from directory naming, which apparently varies. If a future
-  Zen install still isn't found, check `~/.zen/profiles.ini` (or the
-  Flatpak equivalent) for the `[Install...]` section directly.
+- **The profile is always `~/.zen/default`** - this repo owns that one
+  fixed, predictable path rather than discovering or importing whatever
+  profile a previous Arch/Flatpak install happened to name. Earlier
+  versions of this file tried to locate an existing profile (globbing on
+  directory names, then parsing `profiles.ini`'s `[InstallXXXX]
+  Default=` line), which existed to migrate an already-configured
+  profile - unneeded complexity once the goal is just "apply this
+  theme/mods/extensions/settings," not "carry over whatever's already
+  there." If `~/.zen/default` doesn't exist yet, the activation script
+  creates it (see the bootstrap note below); if it does, it's reused
+  and re-synced on every `home-manager switch`.
 - `zenPrefs`: check these out at `about:config`.
 - **`zenUserPrefs`/`zenUserJs`**: the actual look-and-feel state
   (compact mode, floating urlbar, hidden sidebar, and - critically -
@@ -426,16 +457,19 @@ your first `nixos-rebuild switch` - if GRUB doesn't pick it up, run
   instead. DMS renders `~/.config/DankMaterialShell/zen.css` from the
   current wallpaper's palette (`matugenTemplateZenBrowser = true`, in
   [dms.nix](#modulesfeaturesdmsnix)); `home.activation.zenBrowserConfig`
-  here symlinks that file to `chrome/userChrome.css` in whichever Zen
-  profile it finds (native `~/.zen` or Flatpak - see the profile
-  discovery note below).
+  here symlinks that file to `chrome/userChrome.css` in `~/.zen/default`.
   `toolkit.legacyUserProfileCustomizations.stylesheets` (required for any
   `userChrome.css` to take effect at all) is locked on via `zenPrefs`, so
-  there's no manual `about:config` step. The one thing that *can't* be
-  done at build time: the profile directory itself doesn't exist until
-  Zen has been launched once - if theming isn't applied yet, launch Zen
-  once, then re-run `nixos-rebuild switch` (or `home-manager switch`) so
-  the activation script finds the now-existing profile.
+  there's no manual `about:config` step. If `~/.zen/default` doesn't
+  exist yet (a genuinely fresh install that's never launched Zen), the
+  activation script bootstraps it via
+  `zen -CreateProfile "default $HOME/.zen/default"` before symlinking
+  anything. That command still goes through GTK's normal init path even
+  though it never opens a window, so it fails with "no DISPLAY
+  environment variable specified" when run headless from a systemd
+  activation service - it's wrapped in `pkgs.xvfb-run` (a throwaway
+  virtual X server) specifically to satisfy that. First-run theming and
+  mods now apply with zero manual steps.
 - **Zen Mods** (`zenMods`, also inside `home.activation.zenBrowserConfig`
   - one activation script handles theming, `user.js`, and mods together,
   since they all need the same resolved `$PROFILE_DIR`) are a completely
@@ -487,6 +521,40 @@ your first `nixos-rebuild switch` - if GRUB doesn't pick it up, run
     index naturally omits it, rather than needing an explicit
     `enabled = false` override the way a hardcoded list would have.
     Add it back to `zenMods` if/when upstream restores it.
+  - Every `curl` call in this activation script is `${pkgs.curl}/bin/curl`,
+    never bare `curl` - found the hard way, by actually booting a fresh
+    VM and checking: an interactive login shell's `PATH` includes
+    `curl` (it's in `environment.systemPackages`), but the
+    `home-manager-<user>.service` systemd unit that *runs* activation
+    scripts has a much narrower `PATH`, so a bare `curl` there fails
+    with "command not found" - silently, since `fetch_if_missing` and
+    the mods-index fetch both already tolerate curl failing (that's
+    what lets a machine with genuinely no network still apply the rest
+    of the config). `${pkgs.jq}/bin/jq` a few lines below was already
+    written the safe way; `curl` just hadn't been.
+  - `home-manager-<user>.service` (defined per-user in
+    [users.nix](#modulesusersusersnix)) is given
+    `after`/`wants = [ "network-online.target" ]`, so activation - and
+    this script's network calls - don't race a NIC that's still coming
+    up during boot. `NetworkManager-wait-online.service` (which backs
+    that target here, since `networking.networkmanager.enable = true`)
+    reached it in ~1s in VM testing, so this mostly matters on real
+    hardware with a slower DHCP/link-up negotiation.
+
+## `modules/apps/spicetify.nix`
+
+- **Custom font**: Spotify's own client CSS (`xpui`) reads its UI font
+  from the `--font-family` CSS custom property, not a generic
+  `font-family: sans-serif` that fontconfig's `defaultFonts` (set
+  system-wide in [fonts.nix](#modulesfeaturesfontsnix)) could satisfy on
+  its own - it has to be overridden explicitly, hence
+  `theme.additionalCss` setting `--font-family: "${vayoriTheme.font}"`.
+  `theme.extraPkgs = [ vayoriTheme.fontPackage ]` makes that font an
+  explicit dependency of the spiced Spotify derivation itself, rather
+  than relying on it happening to already be installed system-wide.
+  `spicePkgs.themes.hazy // { ... }` merges these onto the theme's
+  existing options rather than replacing them - `theme` accepts a
+  freeform attrset (`freeformType = attrsOf anything`), so this is safe.
 
 ## `modules/apps/nautilus.nix`
 

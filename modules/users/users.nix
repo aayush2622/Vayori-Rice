@@ -86,6 +86,11 @@
           ".face".source = u.avatar;
         };
       }) cfg;
+
+      systemd.services = lib.mapAttrs' (name: u: lib.nameValuePair "home-manager-${name}" {
+        after = [ "network-online.target" ];
+        wants = [ "network-online.target" ];
+      }) cfg;
     };
   };
 }

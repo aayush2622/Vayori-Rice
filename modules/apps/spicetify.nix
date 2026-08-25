@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps."spicetify" = { pkgs, config, ... }:
+  flake.homeModules.apps."spicetify" = { pkgs, config, vayoriTheme, ... }:
   let
     spicePkgs =
       inputs.spicetify-nix.legacyPackages.${pkgs.stdenv.hostPlatform.system};
@@ -14,7 +14,14 @@
 
       spicetifyPackage = pkgs.spicetify-cli;
 
-      theme = spicePkgs.themes.hazy;
+      theme = spicePkgs.themes.hazy // {
+        extraPkgs = [ vayoriTheme.fontPackage ];
+        additionalCss = ''
+          :root {
+            --font-family: "${vayoriTheme.font}", sans-serif !important;
+          }
+        '';
+      };
       colorScheme = "Base";
 
       enabledExtensions = with spicePkgs.extensions; [

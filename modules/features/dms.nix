@@ -33,7 +33,7 @@
 
           enableSystemMonitoring = true;
           enableDynamicTheming = true;
-
+          enableAudioWavelength = true;
           plugins = {
             wallpaperCarousel = {
               enable = true;
