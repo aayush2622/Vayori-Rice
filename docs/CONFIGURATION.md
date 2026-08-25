@@ -12,30 +12,31 @@ reference, not the walkthrough.
 ## Contents
 
 - [How it's wired together](#how-its-wired-together)
+- [Project structure](#project-structure)
 
-**Host & hardware**
-- [host.nix](#moduleshostsnamehostnix)
-- [\_hardware.nix](#moduleshostsname_hardwarenix)
-- [users.nix](#modulesusersusersnix)
+**Core & hosts**
+- [core/users.nix](#modulescoreusersnix)
+- [hosts/\<name\>/host.nix](#moduleshostsnamehostnix)
+- [hosts/\<name\>/\_hardware.nix](#moduleshostsname_hardwarenix)
 
-**Desktop shell**
-- [dms.nix](#modulesfeaturesdmsnix)
-- [niri.nix](#modulesfeaturesnirinix)
-- [fonts.nix / portals.nix](#modulesfeaturesfontsnix--portalsnix)
+**Desktop**
+- [desktop/dms.nix](#modulesdesktopdmsnix)
+- [desktop/niri.nix](#modulesdesktopnirinix)
+- [desktop/fonts.nix / portals.nix](#modulesdesktopfontsnix--portalsnix)
+- [desktop/baseline.nix](#modulesdesktopbaselinenix)
 
-**System features**
-- [dev-system.nix](#modulesfeaturesdev-systemnix)
-- [grub-theme.nix](#modulesfeaturesgrub-themenix)
+**System**
+- [system/dev-tooling.nix](#modulessystemdev-toolingnix)
+- [system/grub-theme.nix](#modulessystemgrub-themenix)
 
 **Apps**
-- [zen-browser.nix](#modulesappszen-browsernix)
-- [spicetify.nix](#modulesappsspicetifynix)
-- [gaming.nix](#modulesappsgamingnix)
-- [nautilus.nix](#modulesappsnautilusnix)
-- [android-studio.nix](#modulesappsandroid-studionix)
-- [dev-tools.nix](#modulesappsdev-toolsnix)
-- [terminal/terminal.nix](#modulesappsterminalterminalnix)
-- [home/baseline.nix](#moduleshomebaselinenix)
+- [apps/zen-browser/zen-browser.nix](#modulesappszen-browserzen-browsernix)
+- [apps/spicetify/spicetify.nix](#modulesappsspicetifyspicetifynix)
+- [apps/gaming/gaming.nix](#modulesappsgaminggamingnix)
+- [apps/nautilus/nautilus.nix](#modulesappsnautilusnautilusnix)
+- [apps/android-studio/android-studio.nix](#modulesappsandroid-studioandroid-studionix)
+- [apps/dev-tools/dev-tools.nix](#modulesappsdev-toolsdev-toolsnix)
+- [apps/terminal/terminal.nix](#modulesappsterminalterminalnix)
 
 ---
 
@@ -57,8 +58,43 @@ Two option namespaces get populated across these files:
 
 | Namespace | Set by | Read by |
 | --- | --- | --- |
-| `flake.nixosModules.*` | hosts, features, `users.nix` | `host.nix`'s `modules` list |
-| `flake.homeModules.apps.*` | `modules/apps/*.nix` | `users.nix`, via `vayori.apps` |
+| `flake.nixosModules.*` | `hosts/`, `desktop/`, `system/`, `core/users.nix` | `host.nix`'s `modules` list |
+| `flake.homeModules.apps.*` | `modules/apps/*/*.nix` | `core/users.nix`, via `vayori.apps` |
+
+All of the above is attribute-name-based, not path-based — `host.nix`
+imports `self.nixosModules.dms`, never a file path. Moving a file to a
+different directory never requires touching `host.nix`'s `modules` list
+or `vayori.apps`, only a rename of the attribute itself would.
+
+## Project structure
+
+```
+modules/
+  core/        flake-parts wiring + the shared user/app framework
+  hosts/<name>/  one machine: host.nix + _hardware.nix, nothing else
+  desktop/     the DE stack — compositor, shell, login theme, fonts,
+               portals, and the GTK/Qt baseline every user gets
+  system/      system-level infra unrelated to the desktop
+  apps/        per-user opt-in modules (vayori.apps), one folder each
+  assets/      static, non-code files (wallpapers)
+```
+
+`core`/`desktop`/`system` boundary, briefly: **core** is pure
+framework/wiring, nothing here is itself a "setting" (`parts.nix`,
+`registry.nix`, and the `vayori.users`/`vayori.apps` option definitions in
+`users.nix`). **desktop** is everything that makes this specific rice look
+and feel the way it does — swap the compositor or shell and this whole
+category changes. **system** is infra that doesn't care what desktop
+you're running (Docker, GRUB theming). The line between `desktop` and
+`system` is "does this depend on niri/DMS specifically" — GRUB theming
+doesn't, so it's `system`, not `desktop`, even though it's still
+"theming."
+
+`apps/` is deliberately flat by *category* (every app is a peer under
+`apps/`) but consistent by *shape* — every app is a folder
+(`apps/<name>/<name>.nix`) whether or not it currently has extra assets
+alongside it, so adding a font file or script to an app later never means
+restructuring it from a flat file into a folder.
 
 ---
 
@@ -77,7 +113,7 @@ never sees the parent NixOS `config` — so `users.nix` re-exports it via
 `home-manager.extraSpecialArgs = { vayoriTheme = config.vayori.theme; };`.
 
 Not wired to `vayori.theme`: the SDDM greeter's bundled font and GRUB's
-theme package — see [fonts.nix / portals.nix](#modulesfeaturesfontsnix--portalsnix).
+theme package — see [fonts.nix / portals.nix](#modulesdesktopfontsnix--portalsnix).
 
 **Two Nix gotchas hit while building this file:**
 
@@ -99,7 +135,11 @@ theme package — see [fonts.nix / portals.nix](#modulesfeaturesfontsnix--portal
 **Build/closure**: `nix.settings.auto-optimise-store = true` hardlinks
 identical files across store paths. `documentation.nixos.enable = false`
 skips building the local NixOS manual (`man configuration.nix` and
-`nixos-option` still work).
+`nixos-option` still work). `nix.gc = { automatic = true; dates =
+"weekly"; options = "--delete-older-than 30d"; };` runs garbage
+collection on a schedule — without this, `/nix/store` only ever grows;
+old generations older than 30 days get collected weekly instead of
+needing a manual `nix-collect-garbage -d`.
 
 **SDDM login-screen cursor** — three independent gaps, each confirmed
 against source, not guessed:
@@ -127,8 +167,8 @@ on real output.
 one setting most new machines actually need to change.
 
 **Users** (`vayori.users`): one entry per real account — see
-[users.nix](#modulesusersusersnix) for field meanings. Generate a password
-hash with `mkpasswd -m sha-512`.
+[core/users.nix](#modulescoreusersnix) for field meanings. Generate a
+password hash with `mkpasswd -m sha-512`.
 
 ## `modules/hosts/<name>/_hardware.nix`
 
@@ -197,7 +237,7 @@ a real driver failure.
    the greeter to skip EGL/GL entirely. VM-only — real hardware has a
    working Intel iGPU and shouldn't pay the software-rendering cost.
 
-## `modules/users/users.nix`
+## `modules/core/users.nix`
 
 Shared framework — what a `vayori.users.<name>` entry can contain and how
 it becomes an account. Add a *person* inline in a host's `host.nix`; only
@@ -206,18 +246,18 @@ touch this file to change what fields a user entry supports.
 - `hashedPassword`: generate with `mkpasswd -m sha-512`. `null` falls back
   to `initialPassword = "changeme"`.
 - `extraGroups`: `"wheel"` for sudo, `"adbusers"` for Android debugging
-  (see [android-studio.nix](#modulesappsandroid-studionix)).
-- `availableApps` auto-discovers from `modules/apps/*.nix` — add an app by
-  dropping a file there, nothing here changes.
+  (see [android-studio.nix](#modulesappsandroid-studioandroid-studionix)).
+- `availableApps` auto-discovers from `modules/apps/*/*.nix` — add an app
+  by dropping a folder there, nothing here changes.
 - Every user's `home-manager-<name>.service` gets
   `after`/`wants = [ "network-online.target" ]` here, generically — any
   app's activation script that touches the network (currently
-  [zen-browser.nix](#modulesappszen-browsernix)'s mods/profile fetch)
-  would otherwise race the NIC coming up during boot.
+  [zen-browser.nix](#modulesappszen-browserzen-browsernix)'s mods/profile
+  fetch) would otherwise race the NIC coming up during boot.
 
 ---
 
-## `modules/features/dms.nix`
+## `modules/desktop/dms.nix`
 
 **Applied to every user**, not hardcoded to one —
 `home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: { ... })`.
@@ -260,8 +300,27 @@ plugin still needs adding to a bar section (`leftWidgets`/`centerWidgets`/
   handles this itself. Not verified against real ASUS hardware (no
   physical device to test in this sandbox) — if the popout can't reach the
   daemons, check `supergfxctl -g`/`asusctl -v` work from a terminal first.
+- **System monitors** (`cpuMonitor`, `ramMonitor`, `gpuMonitor`,
+  `vramMonitor`, `diskMonitor`, `ioMonitor`, `intelGpuMonitor`) — only
+  `gpuMonitor`/`vramMonitor`/`intelGpuMonitor` are actually placed in
+  `rightWidgets`. `cpuMonitor`/`ramMonitor` are deliberately enabled but
+  *not* added to the bar — DMS's own built-in `"cpuUsage"`/`"memUsage"`
+  string widgets are already in `rightWidgets`, so adding the plugin
+  versions too would just show the same CPU/RAM numbers twice.
+  `diskMonitor`/`ioMonitor` are also enabled-but-unplaced, on purpose -
+  genuinely useful, but seven new bar icons at once risked real clutter
+  with no way to visually check the result from this sandbox (no display
+  to actually look at). Both are one drag-and-drop away in DMS's own
+  Settings UI once you can see how the bar actually looks.
+- **`dankQuickSearch`**: enabled, deliberately *not* placed in any bar
+  section — its own description is "web search from the launcher with
+  engine prefixes," meaning it likely integrates into the existing
+  Mod+A/Mod+S spotlight launcher directly rather than needing its own bar
+  icon (unlike the monitor plugins, whose descriptions explicitly say "in
+  your DankBar"). Add it to a widget list too if it turns out to want its
+  own entry.
 
-## `modules/features/niri.nix`
+## `modules/desktop/niri.nix`
 
 **`extraSettings` must be a sibling of `settings`**, not nested inside it —
 nesting it serializes as a literal invalid KDL node instead of using the
@@ -288,7 +347,13 @@ here). Near-identical visually, cheaper to run.
 `sh -c` first. Most binds use `spawn`; the brightness binds use `spawn-sh`
 since they pipe `dms ipc call brightness list` through `awk`.
 
-## `modules/features/fonts.nix` / `portals.nix`
+`binds` is a named `niriBinds` in a `let`, not inlined into `settings` —
+same reasoning as `gaming.nix`'s named bindings: a ~90-line keymap reads
+easier as its own thing than buried three levels into the `packages.myNiri`
+attrset. Purely cosmetic — the built `myNiri` derivation hash is unchanged
+by this, confirmed by rebuilding before/after.
+
+## `modules/desktop/fonts.nix` / `portals.nix`
 
 - `nerd-fonts.jetbrains-mono`: kitty + bar monospace glyphs.
 - `material-symbols`: DMS's icon font.
@@ -300,22 +365,38 @@ since they pipe `dms ipc call brightness list` through `awk`.
 and DMS's own UI (`fontFamily`/`monoFontFamily`). Not covered: the SDDM
 greeter's clock/labels use a bundled `Itim-Regular.ttf` shipped inside the
 "women-umbrella" theme itself
-([features/sddm/Theme/font/](../modules/features/sddm/Theme/font/)) —
+([desktop/sddm/Theme/font/](../modules/desktop/sddm/Theme/font/)) —
 changing that means shipping a different `.ttf`, not a settings tweak. Qt
 apps also aren't covered — their font comes from qt6ct's own config, which
 DMS's `matugenTemplateQt6ct`/`matugenTemplateQt5ct` already manages.
 
+## `modules/desktop/baseline.nix`
+
+Imported for every user regardless of `vayori.apps` — GTK/Qt theming is
+the one piece of the rice nobody opts out of. Lives under `desktop/`, not
+`apps/`, for exactly that reason: it isn't an opt-in app pick, it's part
+of what makes this desktop this desktop.
+
 ---
 
-## `modules/features/dev-system.nix`
+## `modules/system/dev-tooling.nix`
 
-`programs.adb.enable` was removed upstream — systemd 258+ handles the adb
-uaccess udev rules automatically, and `pkgs.android-tools` (already in
-[android-studio.nix](#modulesappsandroid-studionix)) covers the `adb`
-command itself. `users.groups.adbusers` stays declared here purely as a
-valid `extraGroups` entry — it no longer grants anything on its own.
+Named for what it actually is — system-level enablement for development
+workflows, not tied to any one app. Renamed from `dev-system.nix` during
+the project restructure specifically to stop reading as a near-duplicate
+of [apps/dev-tools/dev-tools.nix](#modulesappsdev-toolsdev-toolsnix) (a
+completely different, per-user file — VS Code/git/gh/lazygit/
+docker-compose). `virtualisation.docker.enable`/`libvirtd.enable` are
+the actual system daemons `dev-tools`' `docker-compose` and any VM
+tooling need. `programs.adb.enable` was removed upstream — systemd 258+
+handles the adb uaccess udev rules automatically, and
+`pkgs.android-tools` (already in
+[android-studio.nix](#modulesappsandroid-studioandroid-studionix)) covers
+the `adb` command itself — `users.groups.adbusers` stays declared here
+purely as a valid `extraGroups` entry, it no longer grants anything on
+its own.
 
-## `modules/features/grub-theme.nix`
+## `modules/system/grub-theme.nix`
 
 `grub-theme` is a plain repo meant to be installed via its own shell
 script, not a Nix package. This module fetches its source via the flake
@@ -328,7 +409,7 @@ first rebuild — if GRUB doesn't pick it up, `ls ${inputs.grub-theme}` in
 
 ---
 
-## `modules/apps/zen-browser.nix`
+## `modules/apps/zen-browser/zen-browser.nix`
 
 **The profile is always `~/.zen/default`** — a fixed, predictable path
 this repo owns, rather than discovering/importing whatever a previous
@@ -403,7 +484,7 @@ it's reused and re-synced on every `home-manager switch`.
     a network-less machine still apply the rest of the config) — found by
     actually booting a fresh VM and checking, not assumed.
 
-## `modules/apps/spicetify.nix`
+## `modules/apps/spicetify/spicetify.nix`
 
 **Custom font**: Spotify's client CSS reads its UI font from the
 `--font-family` custom property, not generic `font-family: sans-serif` —
@@ -413,7 +494,7 @@ explicit dependency of the spiced Spotify derivation. `spicePkgs.themes.hazy
 // { ... }` merges onto the theme's existing options — `theme` accepts a
 freeform attrset, so this is safe.
 
-## `modules/apps/gaming.nix`
+## `modules/apps/gaming/gaming.nix`
 
 One file, one `vayori.apps` toggle, for everything Windows-gaming related —
 `lutris` + `heroic` as the two launchers, plus shared tooling. No Steam —
@@ -476,7 +557,7 @@ substitute (Lutris's native "Proton" runner, manages GE-Proton itself).
   `dankAsusControlCenter` DMS widget's "GPU Mode" switch does the same
   thing at the whole-laptop level instead of per-launch.
 
-## `modules/apps/nautilus.nix`
+## `modules/apps/nautilus/nautilus.nix`
 
 - `thumbnail-limit = 200`: thumbnail bigger files instead of a generic
   icon.
@@ -491,13 +572,13 @@ substitute (Lutris's native "Proton" runner, manages GE-Proton itself).
 - gvfs + tumbler are enabled system-wide in `host.nix` — they're daemons,
   not per-user.
 
-## `modules/apps/android-studio.nix`
+## `modules/apps/android-studio/android-studio.nix`
 
 `adb` device access works out of the box (systemd 258+ handles uaccess
 udev rules automatically) — `"adbusers"` in `extraGroups` is optional
 compatibility, not required.
 
-## `modules/apps/dev-tools.nix`
+## `modules/apps/dev-tools/dev-tools.nix`
 
 `git` isn't listed here — it's already in `environment.systemPackages`
 (`host.nix`), since flakes need it system-wide regardless of which apps
@@ -505,11 +586,25 @@ are picked.
 
 ## `modules/apps/terminal/terminal.nix`
 
-Kitty + zsh (oh-my-zsh) + fastfetch, one selectable app. `initContent`
-picks a random logo from `modules/apps/terminal/images/` per shell (falls
-back to fastfetch's default if the directory is empty).
+Kitty + zsh (oh-my-zsh) + fastfetch + Starship + eza, one selectable app.
+`initContent` picks a random logo from `modules/apps/terminal/images/`
+per shell (falls back to fastfetch's default if the directory is empty).
+The zsh plugin list and fastfetch's `modules` array are named `let`
+bindings (`zshPlugins`, `fastfetchModules`) rather than inlined — same
+reasoning as `niri.nix`'s `niriBinds`, purely readability, verified
+identical output by rebuilding before/after.
 
-## `modules/home/baseline.nix`
-
-Imported for every user regardless of `vayori.apps` — GTK/Qt theming is
-the one piece of the rice nobody opts out of.
+- **Prompt is Starship, not a hand-rolled `precmd`**: the previous prompt
+  was a manual `autoload -Uz vcs_info` + `precmd()` function that only
+  ever showed the branch name, no dirty/staged/ahead-behind state.
+  `programs.starship.enableZshIntegration = true` fully owns prompt
+  rendering once enabled (injects its own `precmd` hook via `starship
+  init zsh`), so the old block was removed outright rather than left
+  alongside it - two things fighting over `$PROMPT` isn't a real
+  option. `git_status`'s `format = "[$all_status$ahead_behind]($style) "`
+  is what actually adds the dirty/staged/stash/ahead-behind info the old
+  prompt never had.
+- **`eza`** replaces `ls` (`enableZshIntegration` wires the aliases -
+  `ls`/`la`/`ll`/`lla`/`lt` - automatically, confirmed in the built
+  `.zshrc`), not added as a separate command alongside it - the goal was
+  a better `ls`, not a second tool to remember.

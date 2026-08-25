@@ -17,8 +17,8 @@
           force = true;
           text = builtins.toJSON {
             configVersion = 4;
-            wallpaperPath = "${./../wallpapers}/wallhaven-211op9.jpg";
-            wallpaperCyclingFolderPath = "${./../wallpapers}";
+            wallpaperPath = "${./../assets/wallpapers}/wallhaven-211op9.jpg";
+            wallpaperCyclingFolderPath = "${./../assets/wallpapers}";
           };
         };
         programs.dank-material-shell = {
@@ -50,6 +50,15 @@
             };
 
             dankAsusControlCenter.enable = true;
+
+            cpuMonitor.enable = true;
+            ramMonitor.enable = true;
+            gpuMonitor.enable = true;
+            vramMonitor.enable = true;
+            diskMonitor.enable = true;
+            ioMonitor.enable = true;
+            intelGpuMonitor.enable = true;
+            dankQuickSearch.enable = true;
           };
 
           settings = {
@@ -863,6 +872,21 @@
                     showBatteryTime = false;
                     batteryPillStyle = false;
                     batteryPillPercentSign = false;
+                  }
+
+                  {
+                    id = "intelGpuMonitor";
+                    enabled = true;
+                  }
+
+                  {
+                    id = "gpuMonitor";
+                    enabled = true;
+                  }
+
+                  {
+                    id = "vramMonitor";
+                    enabled = true;
                   }
 
                   {

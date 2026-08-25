@@ -11,7 +11,7 @@
       self.nixosModules.portals
       self.nixosModules.sddmTheme
       self.nixosModules.grubTheme
-      self.nixosModules.devSystem
+      self.nixosModules.devTooling
 
       ./_hardware.nix
 
@@ -94,6 +94,11 @@
           nixpkgs.config.allowUnfree = true;
 
           nix.settings.auto-optimise-store = true;
+          nix.gc = {
+            automatic = true;
+            dates = "weekly";
+            options = "--delete-older-than 30d";
+          };
           documentation.nixos.enable = false;
 
           boot.loader = {
