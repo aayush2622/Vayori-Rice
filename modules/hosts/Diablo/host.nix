@@ -88,6 +88,8 @@
             "spicetify"
             "dev-tools"
             "gaming"
+            "bitwarden"
+            "vscode"
           ];
 
           nix.settings.experimental-features = [ "nix-command" "flakes" ];

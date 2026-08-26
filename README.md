@@ -60,10 +60,12 @@ file in the right folder" - see [Extending it](#extending-it).
   start.
 - Opt-in apps per machine: Nautilus, Zen Browser (locked-down,
   privacy-leaning profile), Vesktop, Spicetify (custom font via CSS
-  injection), a dev-tools bundle (VS Code, git, gh, lazygit,
-  docker-compose), Android Studio scaffolding, and a full Windows-gaming
-  setup (Lutris + Heroic, GE-Proton via umu-launcher, gamescope
-  presets, restyled MangoHud - no Steam required).
+  injection), Bitwarden, a dev-tools bundle (git, gh, lazygit,
+  docker-compose), VS Code and Android Studio - both with the real
+  settings/extensions/plugins from the reference machine pinned as Nix
+  derivations, not a live importer - and a full Windows-gaming setup
+  (Lutris + Heroic, GE-Proton via umu-launcher, gamescope presets,
+  restyled MangoHud - no Steam required).
 - ASUS ROG-specific: a DankBar widget
   ([DankAsusControl](https://github.com/shazzaam7/DankAsusControl)) for
   switching power profiles and GPU mode (Integrated/Hybrid/Dedicated)
@@ -251,8 +253,6 @@ Built on top of (see `flake.nix` for the full input list):
 
 ## Known caveats
 
-- `android-studio` app currently only installs `jdk17` + `android-tools`;
-  the actual `android-studio`/`flutter` packages are commented out.
 - The `dankAsusControlCenter` DMS widget (see [Features](#features)) is
   wired up and builds cleanly, but hasn't been exercised against real
   ASUS hardware yet - see [docs/CONFIGURATION.md](docs/CONFIGURATION.md#modulesdesktopdmsnix)

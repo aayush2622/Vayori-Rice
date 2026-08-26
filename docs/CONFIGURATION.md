@@ -35,7 +35,9 @@ reference, not the walkthrough.
 - [apps/gaming/gaming.nix](#modulesappsgaminggamingnix)
 - [apps/nautilus/nautilus.nix](#modulesappsnautilusnautilusnix)
 - [apps/android-studio/android-studio.nix](#modulesappsandroid-studioandroid-studionix)
+- [apps/vscode/vscode.nix](#modulesappsvscodevscodenix)
 - [apps/dev-tools/dev-tools.nix](#modulesappsdev-toolsdev-toolsnix)
+- [apps/bitwarden/bitwarden.nix](#modulesappsbitwardenbitwardennix)
 - [apps/terminal/terminal.nix](#modulesappsterminalterminalnix)
 
 ---
@@ -621,11 +623,81 @@ substitute (Lutris's native "Proton" runner, manages GE-Proton itself).
 udev rules automatically) — `"adbusers"` in `extraGroups` is optional
 compatibility, not required.
 
+Plugins and editor settings are captured as they exist on the real
+machine, pinned as Nix derivations rather than fetched live at
+activation time:
+
+- **17 real user-installed JetBrains plugins**, each fetched via
+  `pkgs.fetchurl` from `plugins.jetbrains.com/plugin/download?pluginId=<id>&version=<version>`
+  with a pinned content hash (`nix store prefetch-file`). Plugin ids and
+  versions came straight from each installed plugin's own
+  `META-INF/plugin.xml`; the marketplace download endpoint accepts the
+  plugin's own XML id string directly, no numeric marketplace id needed.
+  Bundled/built-in components (e.g. `marketplace`, `vcs-hg`) were
+  excluded by cross-referencing the real install's own
+  `bundled_plugins.txt`.
+- **`pkgs.jetbrains.plugins.addPlugins` does not work here** — it assumes
+  a plain (non-FHS) IDE layout with `plugins/` nested under
+  `$out/<mainProgram>/`. `pkgs.androidStudioPackages.stable` is an
+  FHS-wrapped launcher script derivation — the real IDE lives in a
+  separate `unwrapped` derivation reached only via runtime closure, so
+  that `plugins/` path never exists inside the wrapper's own `$out` and
+  `addPlugins`' build step fails outright. Confirmed by a real failed
+  build, not assumed.
+- Instead, each plugin is placed with `home.file` directly into
+  `~/.local/share/Google/<dataDirectoryName>/<real-plugin-dir-name>` —
+  the same *user* plugins directory the IDE itself reads at startup when
+  you install a plugin through Settings → Plugins, entirely separate
+  from the read-only IDE installation. This sidesteps the FHS-wrapping
+  problem completely and needed zero changes to the stock
+  `androidStudioPackages.stable` package. Verified against the real
+  machine's own `~/.local/share/Google/AndroidStudio2026.1.2/` — every
+  directory/jar name here (`Catppuccin Theme`, `flutter-intellij`,
+  `WakaTime.jar`, etc.) matches exactly.
+- `<dataDirectoryName>` (`AndroidStudio2026.1.3`) is read out of the
+  nixpkgs-built package's own `product-info.json`, not guessed from the
+  package version string — the real machine's installed build
+  (`2026.1.2`) and the pinned nixpkgs build (`2026.1.3.7`) don't share a
+  version, and `product-info.json` is the only ground truth for which
+  config directory an IDE build actually reads.
+- The 5 XML files under `.config/Google/<dataDirectoryName>/options/`
+  (font, LAF, color scheme, One Dark config, Vim emulation) are a
+  straight transcription of the real machine's own files at that path.
+
+## `modules/apps/vscode/vscode.nix`
+
+`programs.vscode.profiles.default` (`userSettings`, `keybindings`,
+`extensions`), the current home-manager schema — not the older flat
+`programs.vscode.userSettings` shape. Settings, the one custom
+keybinding (`ctrl+y` unbound from `editor.action.deleteLines`), and all
+47 extensions are a direct transcription of the real
+`~/.config/Code/User/` on this machine, not a live importer:
+
+- `nixpkgsExtensions`: extensions available pre-packaged in
+  `pkgs.vscode-extensions`.
+- `marketplaceExtensions`: the remaining extensions not in nixpkgs,
+  built via `pkgs.vscode-utils.extensionsFromVscodeMarketplace`, each
+  pinned to the installed `{ name, publisher, version, hash }` with a
+  content hash from `nix store prefetch-file` against the Marketplace's
+  VSIX asset URL.
+
+VSCode itself moved out of `dev-tools.nix` into its own module once it
+needed this much dedicated configuration — `dev-tools.nix` keeps only
+`gh`, `lazygit`, `docker-compose`.
+
 ## `modules/apps/dev-tools/dev-tools.nix`
 
 `git` isn't listed here — it's already in `environment.systemPackages`
 (`host.nix`), since flakes need it system-wide regardless of which apps
 are picked.
+
+## `modules/apps/bitwarden/bitwarden.nix`
+
+Just `pkgs.bitwarden-desktop` — the nixpkgs attribute name is
+`bitwarden-desktop`, not `bitwarden` (that alias throws a
+renamed-package error). Added so a fresh install has a working password
+manager without a manual first-run setup step; vault contents still
+require signing in once, syncing pulls everything else back down.
 
 ## `modules/apps/terminal/terminal.nix`
 

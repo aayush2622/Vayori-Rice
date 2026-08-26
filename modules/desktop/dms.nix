@@ -1,10 +1,18 @@
 { inputs, ... }:
 
 {
-  flake.nixosModules.dms = { pkgs, lib, config, ... }:
-  let theme = config.vayori.theme; in
-  {
-    home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
+  flake.nixosModules.dms =
+    {
+      pkgs,
+      lib,
+      config,
+      ...
+    }:
+    let
+      theme = config.vayori.theme;
+    in
+    {
+      home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
         imports = [
           inputs.dms.homeModules.dank-material-shell
           inputs.dms-plugin-registry.nixosModules.default
@@ -51,13 +59,6 @@
 
             dankAsusControlCenter.enable = true;
 
-            cpuMonitor.enable = true;
-            ramMonitor.enable = true;
-            gpuMonitor.enable = true;
-            vramMonitor.enable = true;
-            diskMonitor.enable = true;
-            ioMonitor.enable = true;
-            intelGpuMonitor.enable = true;
             dankQuickSearch.enable = true;
           };
 
@@ -66,7 +67,7 @@
             currentThemeName = "dynamic";
             currentThemeCategory = "dynamic";
             customThemeFile = "";
-            registryThemeVariants = {};
+            registryThemeVariants = { };
 
             matugenScheme = "scheme-content";
             matugenContrast = 0;
@@ -172,7 +173,7 @@
             showGpuTemp = true;
 
             selectedGpuIndex = 0;
-            enabledGpuPciIds = [];
+            enabledGpuPciIds = [ ];
 
             showSystemTray = true;
             systemTrayIconTintMode = "none";
@@ -325,7 +326,7 @@
             workspaceUnfocusedMonitorBorderCustomColor = "#6750A4";
             workspaceUnfocusedMonitorBorderThickness = 2;
 
-            workspaceNameIcons = {};
+            workspaceNameIcons = { };
 
             waveProgressEnabled = true;
             scrollTitleEnabled = true;
@@ -338,7 +339,7 @@
             audioWheelScrollAmount = 5;
             audioDeviceScrollVolumeEnabled = false;
 
-            mediaExcludePlayers = [];
+            mediaExcludePlayers = [ ];
             mediaSize = 1;
 
             clockCompactMode = false;
@@ -372,7 +373,7 @@
             runningAppsGroupByApp = false;
             runningAppsCurrentMonitor = false;
 
-            appIdSubstitutions = [];
+            appIdSubstitutions = [ ];
 
             centeringMode = "index";
 
@@ -393,13 +394,13 @@
 
             greeterPamExternallyManaged = false;
             greeterSyncPending = false;
-            greeterSyncBaseline = {};
+            greeterSyncBaseline = { };
 
             appLauncherViewMode = "list";
             spotlightModalViewMode = "list";
 
             browserPickerViewMode = "grid";
-            browserUsageHistory = {};
+            browserUsageHistory = { };
 
             appPickerViewMode = "grid";
 
@@ -419,7 +420,7 @@
             rememberLastQuery = false;
             rememberLastMode = true;
 
-            spotlightSectionViewModes = {};
+            spotlightSectionViewModes = { };
 
             appDrawerSectionViewModes = {
               apps = "list";
@@ -747,7 +748,7 @@
             notificationHistorySaveNormal = true;
             notificationHistorySaveCritical = true;
 
-            notificationRules = [];
+            notificationRules = [ ];
             notificationFocusedMonitor = false;
 
             osdAlwaysShowValue = false;
@@ -798,24 +799,24 @@
             updaterIncludeFlatpak = true;
             updaterAllowAUR = true;
 
-            updaterIgnoredPackages = [];
+            updaterIgnoredPackages = [ ];
 
             displayNameMode = "system";
 
-            screenPreferences = {};
-            showOnLastDisplay = {};
+            screenPreferences = { };
+            showOnLastDisplay = { };
 
-            niriOutputSettings = {};
-            hyprlandOutputSettings = {};
+            niriOutputSettings = { };
+            hyprlandOutputSettings = { };
 
-            displayProfiles = {};
-            activeDisplayProfile = {};
+            displayProfiles = { };
+            activeDisplayProfile = { };
 
             displayProfileAutoSelect = false;
             displayShowDisconnected = false;
             displaySnapToEdge = true;
 
-            connectedFrameBarStyleBackups = {};
+            connectedFrameBarStyleBackups = { };
 
             barConfigs = [
               {
@@ -872,21 +873,6 @@
                     showBatteryTime = false;
                     batteryPillStyle = false;
                     batteryPillPercentSign = false;
-                  }
-
-                  {
-                    id = "intelGpuMonitor";
-                    enabled = true;
-                  }
-
-                  {
-                    id = "gpuMonitor";
-                    enabled = true;
-                  }
-
-                  {
-                    id = "vramMonitor";
-                    enabled = true;
                   }
 
                   {
@@ -1051,13 +1037,13 @@
 
             systemMonitorDisplayPreferences = [ "all" ];
 
-            systemMonitorVariants = [];
+            systemMonitorVariants = [ ];
 
-            desktopWidgetPositions = {};
-            desktopWidgetGridSettings = {};
+            desktopWidgetPositions = { };
+            desktopWidgetGridSettings = { };
 
-            desktopWidgetInstances = [];
-            desktopWidgetGroups = [];
+            desktopWidgetInstances = [ ];
+            desktopWidgetGroups = [ ];
 
             builtInPluginSettings = {
               dms_settings_search = {
@@ -1081,8 +1067,8 @@
               "delete"
             ];
 
-            launcherPluginVisibility = {};
-            launcherPluginOrder = [];
+            launcherPluginVisibility = { };
+            launcherPluginOrder = [ ];
 
             frameEnabled = false;
             frameThickness = 16;
@@ -1111,6 +1097,6 @@
             configVersion = 13;
           };
         };
-    });
-  };
+      });
+    };
 }
