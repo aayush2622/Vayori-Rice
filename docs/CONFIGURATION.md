@@ -377,6 +377,49 @@ the one piece of the rice nobody opts out of. Lives under `desktop/`, not
 `apps/`, for exactly that reason: it isn't an opt-in app pick, it's part
 of what makes this desktop this desktop.
 
+- **`gtk.theme` (adw-gtk3) was missing entirely** — `iconTheme`/
+  `cursorTheme`/`font` were always set, but no `gtk.theme.name`/`package`
+  at all, so GTK3 apps had no explicit base theme and fell back to
+  whatever GTK's own compiled-in default is. This is the actual reason
+  matugen's dynamic wallpaper recoloring didn't visibly do anything on
+  GTK apps: DMS's own `apply_gtk3_colors` (traced through its `gtk.sh`,
+  bundled in the DMS source) always symlinks `gtk.css -> dank-colors.css`
+  regardless of what theme is active, but those color values are
+  `@define-color` overrides meant to be *consumed* by a libadwaita-aware
+  theme's stylesheet - with no such theme active, the overrides had
+  nothing to attach to. `adw-gtk3` is exactly that theme (the standard
+  GTK3-compatibility companion for libadwaita/GNOME-style apps).
+- **`home.file.".local/share/themes/adw-gtk3"`** closes a second, more
+  specific gap in the same script: `link_gtk3_assets` (also in `gtk.sh`)
+  only searches four hardcoded paths for the theme's checkbox/radio/
+  slider glyph assets - `~/.local/share/themes/adw-gtk3/...`,
+  `~/.themes/adw-gtk3/...`, and two `/usr/share`-rooted ones that don't
+  exist on NixOS at all. `gtk.theme.package` alone makes the theme
+  reachable via `XDG_DATA_DIRS` (fine for GTK's own theme *loading*),
+  but that's not one of the four paths this specific script checks - so
+  without this extra symlink, checkboxes/radios/sliders still render as
+  solid blocks even with the theme name correctly set. Confirmed by
+  reading `gtk.sh`'s own comment: *"without them checked boxes render as
+  solid blocks."*
+- **`gtk.gtk4.theme = null`**: silences a home-manager deprecation
+  warning (`home.stateVersion` < `26.05` means the legacy default,
+  `config.gtk.theme`, is used unless set explicitly) by adopting the new
+  default directly, since it's also the semantically correct one here -
+  `adw-gtk3` is a GTK3-only compatibility theme; applying it as a "GTK4
+  theme" doesn't mean anything, GTK4/libadwaita apps get their look from
+  the app itself plus matugen's `@import`ed `dank-colors.css`, not a
+  named theme switch.
+- **`xdg.userDirs`**: creates and populates `~/.config/user-dirs.dirs`
+  with the standard XDG folders (Desktop/Documents/Downloads/Music/
+  Pictures/Public/Templates/Videos) - this is what makes them show up as
+  fixed sidebar bookmarks in Nautilus (and any other GTK file picker/file
+  manager) automatically; without it, those entries just don't exist
+  anywhere for a fresh user. `setSessionVariables = true` keeps the
+  legacy behavior of also exporting `XDG_DOWNLOAD_DIR` etc. as real
+  session env vars (some apps read these directly rather than parsing
+  the file themselves) - explicit for the same reason as `gtk4.theme`,
+  silencing the same class of stateVersion-driven default-change warning.
+
 ---
 
 ## `modules/system/dev-tooling.nix`

@@ -5,6 +5,13 @@
     gtk = {
       enable = true;
 
+      theme = {
+        name = "adw-gtk3";
+        package = pkgs.adw-gtk3;
+      };
+
+      gtk4.theme = null;
+
       iconTheme = {
         name = theme.iconTheme;
         package = theme.iconPackage;
@@ -40,5 +47,13 @@
       kdePackages.qtstyleplugin-kvantum
       libsForQt5.qtstyleplugin-kvantum
     ];
+
+    xdg.userDirs = {
+      enable = true;
+      createDirectories = true;
+      setSessionVariables = true;
+    };
+
+    home.file.".local/share/themes/adw-gtk3".source = "${pkgs.adw-gtk3}/share/themes/adw-gtk3";
   };
 }
