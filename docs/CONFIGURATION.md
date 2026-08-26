@@ -18,6 +18,7 @@ reference, not the walkthrough.
 - [core/users.nix](#modulescoreusersnix)
 - [hosts/\<name\>/host.nix](#moduleshostsnamehostnix)
 - [hosts/\<name\>/\_hardware.nix](#moduleshostsname_hardwarenix)
+- [hosts/\<name\>/vm.nix](#moduleshostsnamevmnix)
 
 **Desktop**
 - [desktop/dms.nix](#modulesdesktopdmsnix)
@@ -222,22 +223,47 @@ a real driver failure.
   is a straight name collision: whichever starts second silently loses
   profile switching.
 
-**`virtualisation.vmVariant`** — two independent fixes for
-`nixos-rebuild build-vm`:
+## `modules/hosts/<name>/vm.nix`
 
-1. QEMU has no Nvidia GPU, so the real Nvidia driver stack (gated via
-   `services.xserver.videoDrivers`) leaves niri with no working DRM device.
-   Clearing `videoDrivers` for the VM build falls back to `modesetting`,
-   which QEMU's virtual GPU supports natively. `asusd`/`supergfxd` are
-   disabled the same way — no ASUS hardware in a VM either.
-2. Clearing the Nvidia stack still left the VM black after "Reached target
-   Graphical Interface." Root cause: QEMU's `bochs-drm` has no real DRI2
-   driver, so the greeter's QML frontend (a Wayland *client*, unlike
-   Weston's own server-side renderer) can't get a hardware EGL context —
-   Mesa's `zink` fallback then also fails (no Vulkan ICD). Fix:
+Everything `virtualisation.vmVariant` touches lives here, not scattered
+across whichever file happens to reference the hardware it's disabling —
+`nixos-rebuild build-vm`/`nix build .#nixosConfigurations.Diablo.config.system.build.vm`
+is one concern, kept in one file. Three independent fixes, all only active
+for the VM build (`config.system.build.toplevel`, the real deployed
+system, never sees `vmVariant` at all):
+
+1. QEMU has no Nvidia GPU and no ASUS hardware. The real Nvidia driver
+   stack (gated via `services.xserver.videoDrivers`) leaves niri with no
+   working DRM device if left enabled, so it's cleared for the VM build,
+   falling back to `modesetting`, which QEMU's virtual GPU supports
+   natively. `asusd`/`supergfxd` are force-disabled the same way.
+2. Clearing the Nvidia stack still left the VM black after "Reached
+   target Graphical Interface." Root cause: QEMU's `bochs-drm` has no real
+   DRI2 driver, so the SDDM greeter's QML frontend (a Wayland *client*,
+   unlike Weston's own server-side renderer) can't get a hardware EGL
+   context — Mesa's `zink` fallback then also fails (no Vulkan ICD). Fix:
    `QT_QUICK_BACKEND=software` in the VM's `GreeterEnvironment`, forcing
    the greeter to skip EGL/GL entirely. VM-only — real hardware has a
    working Intel iGPU and shouldn't pay the software-rendering cost.
+3. Getting past the greeter, niri's own TTY/DRM backend still had no real
+   GPU allocator (`no allocator available for device`, zero outputs) with
+   a plain `virtio`/`std` VGA device — needs `-device virtio-vga-gl` with
+   a GL-enabled display (`gtk,gl=on`) instead, backed by the *host's* own
+   GPU. The catch on a non-NixOS dev host (this one's EndeavourOS): the
+   Nix-built qemu looks for mesa's GBM/DRI/EGL drivers under NixOS's own
+   `/run/opengl-driver` convention, which doesn't exist here. Rather than
+   requiring env vars at launch time, `qemuWithHostGL` wraps the qemu
+   *binary itself* (`makeWrapper`) with this host's real Arch mesa paths
+   (`/usr/lib/{dri,gbm}`) — so the plain, unmodified
+   `nix build .../vm` + `./result/bin/run-<name>-vm` workflow just works,
+   confirmed by booting it and watching the exact `MESA-LOADER`/
+   `gbm_create_device failed` errors this fixes disappear. Dev-host-specific
+   by nature — these are EndeavourOS/Arch's real mesa paths, not something
+   portable to another distro's layout. On a real NixOS host this wrapper
+   is actively wrong (`/usr/lib/dri` doesn't exist there, and the unwrapped
+   `qemu_kvm` already finds `/run/opengl-driver` natively) — swap
+   `qemuWithHostGL` back to plain `pkgs.qemu_kvm` if this ever moves off
+   this specific dev machine.
 
 ## `modules/core/users.nix`
 

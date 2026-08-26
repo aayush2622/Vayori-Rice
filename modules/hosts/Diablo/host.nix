@@ -12,6 +12,7 @@
       self.nixosModules.sddmTheme
       self.nixosModules.grubTheme
       self.nixosModules.devTooling
+      self.nixosModules.vmTesting
 
       ./_hardware.nix
 
