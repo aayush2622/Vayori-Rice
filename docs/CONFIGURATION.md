@@ -1121,8 +1121,11 @@ data like everywhere else in this repo, not as opaque blobs.
 - **Plain `{ enabled = false; }` plugin entries are omitted, not
   transcribed** — of the real machine's ~172 plugins, only 68 are kept
   (everything actually `enabled = true`, everything with non-default
-  settings regardless of enabled state, and the "*API" framework
-  plugins kept explicit either way — see below). This is a verified
+  settings regardless of enabled state — e.g. `CustomIdle` and
+  `NewGuildSettings` are both disabled but keep their non-default
+  settings anyway, so those stick around if either is ever re-enabled
+  through Vesktop's own UI — and the "*API" framework plugins kept
+  explicit either way — see below). This is a verified
   no-op, not a guess: Vencord's own `src/api/Settings.ts`
   (`getDefaultValue`) resolves a *missing* plugin entry to
   `plugins[key].required || plugins[key].enabledByDefault || false` —

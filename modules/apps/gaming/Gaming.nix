@@ -12,9 +12,6 @@
       exec ${pkgs.gamescope}/bin/gamescope -w 1600 -h 900 -W 1920 -H 1080 -F fsr -f --adaptive-sync -- "$@"
     '';
 
-    # Steam itself comes from `programs.steam.enable` in Host.nix (NixOS-level,
-    # handles 32-bit graphics libs, firewall, and controller udev rules) -
-    # adwsteamgtk is the client-side skin installer matugen themes below.
     launchers = with pkgs; [ lutris heroic adwsteamgtk ];
     protonTooling = with pkgs; [ umu-launcher protonup-qt winetricks protontricks wine ];
     overlayTooling = [ pkgs.gamescope gamescopeFhd gamescopeFsr ];

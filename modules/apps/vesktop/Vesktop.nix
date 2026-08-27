@@ -1,8 +1,6 @@
 { self, inputs, ... }: {
   flake.homeModules.apps.Vesktop = { pkgs, config, ... }:
   let
-    # Vesktop's own app settings (splash screen, tray, spellcheck) - the
-    # real machine's own values, transcribed straight across.
     vesktopSettings = {
       discordBranch = "stable";
       minimizeToTray = true;
@@ -12,10 +10,6 @@
       splashBackground = "rgb(29, 37, 43)";
     };
 
-    # Vencord's own settings, same idea, minus `plugins` (below) - every
-    # Vencord plugin ships built into the app itself, so unlike Android
-    # Studio's JetBrains plugins there's nothing here to fetch, only
-    # settings to declare.
     vencordSettings = {
       autoUpdate = true;
       autoUpdateNotification = true;
@@ -48,28 +42,7 @@
       windowsMaterial = "none";
     };
 
-    # Every plugin actually enabled on the real machine (with its real
-    # non-default settings), plus a handful kept explicit for other
-    # reasons - see the comment below the attrset. Everything else - every
-    # plugin that's plain `{ enabled = false; }` with nothing else set -
-    # is deliberately omitted rather than spelled out: Vencord's own
-    # `Settings.ts` (`getDefaultValue`) resolves a *missing* plugin entry
-    # to `plugins[key].required || plugins[key].enabledByDefault || false`,
-    # i.e. `false` for any plugin that isn't itself marked required/
-    # enabled-by-default in its own source - confirmed against Vencord's
-    # actual source, not assumed. Cross-checked every plugin in this repo
-    # with a static `required: true` or `enabledByDefault: true`
-    # (DisableDeepLinks, BadgeAPI, CrashHandler, WebContextMenus,
-    # WebKeybinds, WebScreenShareFixes) against the real settings - every
-    # one of them is already `true` here, so omitting the ~115 plain
-    # `false` entries changes nothing observable.
     vencordPlugins = {
-      # The "*API" plugins are kept explicit either way, even the two
-      # disabled ones (MessagePopoverAPI, ServerListAPI) - these are
-      # framework plugins other plugins hook into, not plain features,
-      # and whether some *other* enabled plugin's dependency graph could
-      # ever promote one back to "required" isn't something worth
-      # gambling on for a handful of lines.
       ChatInputButtonAPI = { enabled = true; };
       CommandsAPI = { enabled = true; };
       DynamicImageModalAPI = { enabled = true; };
@@ -111,8 +84,6 @@
       ClearURLs = { enabled = true; };
       CrashHandler = { enabled = true; };
       CustomIdle = {
-        # Disabled, but keeps its non-default settings in case it's ever
-        # re-enabled through Vesktop's own UI.
         enabled = false;
         idleTimeout = 10;
         remainInIdle = true;
@@ -170,7 +141,6 @@
         inlineEdits = true;
       };
       NewGuildSettings = {
-        # Same as CustomIdle - disabled, non-default settings kept.
         enabled = false;
         guild = true;
         messages = 3;
@@ -272,11 +242,6 @@
   {
     home.packages = [ pkgs.vesktop ];
 
-    # `force = true`: Vesktop rewrites both of these itself whenever a
-    # setting is toggled through its own UI, same trade-off already
-    # accepted elsewhere in this repo for exactly this reason (DMS's
-    # settings.json, Lutris's runners/wine.yml) - an in-app change sticks
-    # until the next rebuild, then resets to what's declared here.
     home.file.".config/vesktop/settings.json" = {
       text = builtins.toJSON vesktopSettings;
       force = true;
@@ -288,10 +253,6 @@
 
     home.file.".config/matugen/templates/vesktop-colors.css".text = self.matugenTemplates.vesktop;
 
-    # quickCss.css itself is deliberately *not* a home.file - matugen owns
-    # it outright, rewritten on every wallpaper change, same as
-    # Btop/Heroic/Steam/Wine/Android Studio's own matugen output files.
-    # `useQuickCss = true` above is what makes Vesktop actually load it.
     vayori.matugenTemplates.vesktop = ''
       [templates.vesktop]
       input_path = '${config.home.homeDirectory}/.config/matugen/templates/vesktop-colors.css'

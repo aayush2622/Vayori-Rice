@@ -5,25 +5,6 @@
     description = "Raw matugen template content shared across app modules - see modules/desktop/Matugen.nix.";
   };
 
-  # Single, shared home for the raw matugen template *content* used by app
-  # modules across this repo (Terminal, Gaming, AndroidStudio, ...). Each
-  # app module still does its own app-specific wiring - writing the content
-  # to a file under ~/.config/matugen/templates/ (matugen doesn't care
-  # where input_path lives - only the merged config.toml itself has to be
-  # at DMS's mandated ~/.config/quickshell/dms/matugen/config.toml, see
-  # below) and registering a `[templates.<id>]` block (input_path/
-  # output_path/post_hook) via `vayori.matugenTemplates` - but the
-  # template bodies themselves live here as one public, importable set of
-  # strings instead of being duplicated/inlined per app.
-  #
-  # This follows DMS's own documented custom-template mechanism exactly
-  # (https://danklinux.com/docs/dankmaterialshell/application-themes):
-  # one ~/.config/quickshell/dms/matugen/config.toml, a single [config]
-  # section, and one [templates.<id>] block per themed app with absolute
-  # input_path/output_path. See modules/desktop/Baseline.nix for where
-  # `vayori.matugenTemplates` is declared and assembled into that file,
-  # and its "Generated Files" section for the built-in GTK/Qt templates
-  # DMS itself already produces (no wiring needed here for those).
   config.flake.matugenTemplates = {
     btop = ''
       theme[main_bg]=""
@@ -226,19 +207,6 @@
       "WindowText"="{{ colors.on_background.default.red }} {{ colors.on_background.default.green }} {{ colors.on_background.default.blue }}"
     '';
 
-    # Vesktop's own QuickCSS, layered on top of the real machine's actual
-    # curated theme - DiscordRecolor (mwittrien/BetterDiscordAddons) -
-    # kept verbatim (the `@import`, scrollbar rule, and every comment),
-    # only the `:root` custom-property *values* it exposes for exactly
-    # this purpose are swapped from their original hardcoded "R,G,B"
-    # triples to matugen ones. DiscordRecolor's variable contract doesn't
-    # map 1:1 onto Material's roles (it wants a 6-step text-brightness
-    # ramp and a 4-step background-elevation ramp, Material gives named
-    # roles) - mapped by intent, brightest/most-prominent role first:
-    # on_background/on_surface/on_surface_variant/outline/outline_variant/
-    # surface_container_highest for text, background/surface_container*
-    # for the background ramp. `--settingsicons` is a style-mode flag,
-    # not a color - left as the original's literal `0`.
     vesktop = ''
       @import url('https://mwittrien.github.io/BetterDiscordAddons/Themes/DiscordRecolor/DiscordRecolor.css');
 
@@ -279,11 +247,6 @@
       /* Any custom CSS below here */
     '';
 
-    # Android Studio's .icls scheme XML needs the scheme's own name baked
-    # into itself (metaInfo/originalScheme) - a value each app instance
-    # already computes locally (colors dir, output filename, ...) - so
-    # this one template is a function of that name rather than a plain
-    # string, called as `matugenTemplates.androidStudio matugenSchemeName`.
     androidStudio = schemeName: ''
       <scheme name="${schemeName}" version="142" parent_scheme="Darcula">
         <metaInfo>
