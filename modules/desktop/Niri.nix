@@ -1,9 +1,9 @@
 { self, inputs, ... }:
 {
-  flake.nixosModules.niri = { pkgs, ... }: {
+  flake.nixosModules.Niri = { pkgs, ... }: {
     programs.niri = {
       enable = true;
-      package = self.packages.${pkgs.stdenv.hostPlatform.system}.myNiri;
+      package = self.packages.${pkgs.stdenv.hostPlatform.system}.MyNiri;
     };
   };
 
@@ -98,7 +98,7 @@
     };
   in
   {
-    packages.myNiri = inputs.wrapper-modules.wrappers.niri.wrap {
+    packages.MyNiri = inputs.wrapper-modules.wrappers.niri.wrap {
       inherit pkgs;
 
       extraSettings = [

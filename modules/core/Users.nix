@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.nixosModules.vayoriUsers = { config, lib, pkgs, ... }:
+  flake.nixosModules.VayoriUsers = { config, lib, pkgs, ... }:
   let
     cfg = config.vayori.users;
 
@@ -78,7 +78,7 @@
 
       home-manager.users = lib.mapAttrs (name: u: { ... }: {
         imports = [
-          self.homeModules.baseline
+          self.homeModules.Baseline
         ] ++ (map (app: self.homeModules.apps.${app}) config.vayori.apps);
 
         home.stateVersion = config.system.stateVersion;

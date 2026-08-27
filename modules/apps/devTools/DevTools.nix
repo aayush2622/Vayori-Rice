@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps."dev-tools" = { pkgs, ... }: {
+  flake.homeModules.apps.DevTools = { pkgs, ... }: {
     home.packages = with pkgs; [
       gh
       lazygit

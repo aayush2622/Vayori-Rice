@@ -23,7 +23,7 @@ file in the right folder" - see [Extending it](#extending-it).
 > [!WARNING]
 > **This is one person's real machine config, not a generic template.**
 > Disk UUIDs, GPU bus IDs, and account details in
-> `modules/hosts/Diablo/host.nix` and `_hardware.nix` are specific to the
+> `modules/hosts/Diablo/Host.nix` and `_hardware.nix` are specific to the
 > original author's laptop. Deploying it unmodified **will not boot** on
 > different hardware. You can absolutely use this as a base - read
 > [Using this on your own machine](#using-this-on-your-own-machine) first.
@@ -59,13 +59,14 @@ file in the right folder" - see [Extending it](#extending-it).
   highlighting) + fastfetch with a randomized ASCII/image logo per shell
   start.
 - Opt-in apps per machine: Nautilus, Zen Browser (locked-down,
-  privacy-leaning profile), Vesktop, Spicetify (custom font via CSS
-  injection), Bitwarden, a dev-tools bundle (git, gh, lazygit,
-  docker-compose), VS Code and Android Studio - both with the real
-  settings/extensions/plugins from the reference machine pinned as Nix
-  derivations, not a live importer - and a full Windows-gaming setup
-  (Lutris + Heroic, GE-Proton via umu-launcher, gamescope presets,
-  restyled MangoHud - no Steam required).
+  privacy-leaning profile), Spicetify (custom font via CSS injection),
+  Bitwarden, a dev-tools bundle (git, gh, lazygit, docker-compose), VS
+  Code, Android Studio, and Vesktop - all with the real settings/
+  plugins/extensions from the reference machine pinned as Nix
+  derivations, not a live importer - and a full gaming setup (Steam,
+  Lutris + Heroic, GE-Proton via umu-launcher, gamescope presets,
+  restyled MangoHud - Steam, Heroic, Vesktop, and even Wine's own
+  dialogs pick up the current matugen palette too).
 - ASUS ROG-specific: a DankBar widget
   ([DankAsusControl](https://github.com/shazzaam7/DankAsusControl)) for
   switching power profiles and GPU mode (Integrated/Hybrid/Dedicated)
@@ -98,7 +99,7 @@ sudo nixos-rebuild switch --flake .#Diablo
 ## Using this on your own machine
 
 A host is exactly **two files**, both under `modules/hosts/<name>/`:
-`host.nix` (hostname, users, apps, timezone, bootloader, packages - all of
+`Host.nix` (hostname, users, apps, timezone, bootloader, packages - all of
 it) and `_hardware.nix` (disks, GPU - the `hardware-configuration.nix`
 equivalent). Nothing in `modules/desktop/`, `modules/system/`, or
 `modules/apps/` needs to change to move this to different hardware.
@@ -126,14 +127,14 @@ equivalent). Nothing in `modules/desktop/`, `modules/system/`, or
    an Nvidia Optimus laptop - `intelBusId`/`nvidiaBusId` are PCI addresses
    specific to that one machine (`lspci` to find yours if you do need it).
 
-3. **Edit `host.nix`**:
+3. **Edit `Host.nix`**:
    - Change `Diablo` (the `flake.nixosConfigurations.Diablo` line and
      `networking.hostName`) to `<yourhostname>`.
    - Replace the `vayori.users` block with your own people - each entry
      takes `fullName`/`hashedPassword`/`extraGroups`/`shell`/`avatar`/
-     `extraPackages` (see `modules/core/users.nix` for what each does;
+     `extraPackages` (see `modules/core/Users.nix` for what each does;
      generate a password hash with `mkpasswd -m sha-512`).
-   - Adjust `vayori.apps` - a plain list of names from `modules/apps/*.nix`.
+   - Adjust `vayori.apps` - a plain list of names from `modules/apps/*/*.nix`.
    - Adjust timezone/locale/bootloader/packages further down as needed.
 
 4. **Rebuild**:
@@ -153,19 +154,20 @@ equivalent). Nothing in `modules/desktop/`, `modules/system/`, or
 flake.nix                    inputs + `import-tree ./modules` (see modules/core/)
 modules/
   core/                       flake-parts wiring + the shared user/app framework, not per-host config
-    parts.nix                   supported `systems` for flake-parts
-    registry.nix                 declares the flake.homeModules option (flake-parts has no builtin one)
-    users.nix                     the vayori.users / vayori.apps option definitions
+    Parts.nix                   supported `systems` for flake-parts
+    Registry.nix                 declares the flake.homeModules option (flake-parts has no builtin one)
+    Users.nix                     the vayori.users / vayori.apps option definitions
   hosts/<name>/               everything for one machine - just these two files:
-    host.nix                    nixosConfigurations.<name>: users, apps, timezone, bootloader, packages
+    Host.nix                    nixosConfigurations.<name>: users, apps, timezone, bootloader, packages
     _hardware.nix                hardware-configuration.nix equivalent (disks, GPU) - leading `_` = import-tree ignores it
   desktop/                    the DE stack: compositor, shell, login theme, fonts, portals
-    niri.nix / dms.nix / fonts.nix / portals.nix / baseline.nix (GTK/Qt theming every user gets) / sddm/
+    Niri.nix / Dms.nix / Fonts.nix / Portals.nix / Baseline.nix (GTK/Qt theming every user gets)
+    Matugen.nix                 shared matugen template content, one attr per themed app / sddm/
   system/                     system-level infra unrelated to the desktop
-    dev-tooling.nix (docker/libvirtd/adbusers) / grub-theme.nix
+    DevTooling.nix (docker/libvirtd/adbusers) / GrubTheme.nix
   apps/                       opt-in per-user (home-manager) modules, picked via vayori.apps - one folder each
   assets/
-    wallpapers/                 default wallpaper set (session.json seeded to point here, see desktop/dms.nix)
+    wallpapers/                 default wallpaper set (session.json seeded to point here, see desktop/Dms.nix)
 ```
 
 </details>
@@ -173,14 +175,14 @@ modules/
 ## Extending it
 
 **Add a person** to an existing host: add another entry to the
-`vayori.users` block in that host's `host.nix` - no separate file, nothing
+`vayori.users` block in that host's `Host.nix` - no separate file, nothing
 else to wire up. Apps are picked once per *machine* (`vayori.apps`, same
 file), not per person - everyone on a host gets the same app set.
 
 **Add an app**: drop a folder in `modules/apps/` (e.g.
-`modules/apps/foo/foo.nix`) that sets `flake.homeModules.apps."<name>"`.
+`modules/apps/foo/Foo.nix`) that sets `flake.homeModules.apps.<Name>`.
 It's automatically a valid entry for `vayori.apps` - nothing else to wire
-up (see `modules/core/users.nix`,
+up (see `modules/core/Users.nix`,
 `availableApps = builtins.attrNames self.homeModules.apps`).
 
 **Add a host**: copy `modules/hosts/Diablo/` to `modules/hosts/<name>/`
@@ -194,8 +196,8 @@ and edit its two files. Full walkthrough:
 The `.nix` files themselves are kept comment-free - every "why" behind a
 setting (plus a few real gotchas worth knowing before you edit one) lives
 in [docs/CONFIGURATION.md](docs/CONFIGURATION.md) instead, organized to
-match `modules/`. Worth reading before touching `host.nix`, `niri.nix`, or
-`dms.nix` in particular - each has at least one non-obvious constraint
+match `modules/`. Worth reading before touching `Host.nix`, `Niri.nix`, or
+`Dms.nix` in particular - each has at least one non-obvious constraint
 that'll bite silently otherwise.
 
 ---
@@ -229,7 +231,7 @@ that'll bite silently otherwise.
 
 </details>
 
-Full list in [modules/desktop/niri.nix](modules/desktop/niri.nix).
+Full list in [modules/desktop/Niri.nix](modules/desktop/Niri.nix).
 
 ---
 

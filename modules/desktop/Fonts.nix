@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.nixosModules.fonts = { pkgs, config, ... }:
+  flake.nixosModules.Fonts = { pkgs, config, ... }:
   let theme = config.vayori.theme; in
   {
     fonts.packages = with pkgs; [

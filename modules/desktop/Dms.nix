@@ -1,7 +1,7 @@
 { inputs, ... }:
 
 {
-  flake.nixosModules.dms =
+  flake.nixosModules.Dms =
     {
       pkgs,
       lib,
@@ -10,22 +10,127 @@
     }:
     let
       theme = config.vayori.theme;
+
+      registryPlugins = pkgs.callPackage "${inputs.dms-plugin-registry}/nix/default.nix" { };
+
+      assertPatched = file: needle: ''
+        grep -qF ${lib.escapeShellArg needle} "${file}" || {
+          echo "patch verification failed: ${lib.escapeShellArg needle} not found in ${file} (upstream source likely changed - update the patch in dms.nix)" >&2
+          exit 1
+        }
+      '';
+
+      assertPatchedLine = file: line: needle: ''
+        sed -n '${toString line}p' "${file}" | grep -qF ${lib.escapeShellArg needle} || {
+          echo "patch verification failed: line ${toString line} of ${file} doesn't say ${lib.escapeShellArg needle} (upstream source likely changed - update the patch in dms.nix)" >&2
+          exit 1
+        }
+      '';
+
+      mkPatchedPlugin = name: src: patchScript:
+        pkgs.runCommand "dms-plugin-${name}-patched" { } ''
+          cp -r ${src} $out
+          chmod -R u+w $out
+          ${patchScript}
+        '';
+
+      dankDiskUsagePatched = mkPatchedPlugin "dankDiskUsage" registryPlugins.dankDiskUsage ''
+        substituteInPlace $out/DankDiskUsageWidget.qml \
+          --replace-quiet "size: Theme.fontSizeLarge" "size: root.iconSize"
+        sed -i '312s/Theme\.spacingS/Theme.spacingXS/' $out/DankDiskUsageWidget.qml
+        substituteInPlace $out/DankDiskUsageWidget.qml \
+          --replace-quiet 'return "#ff4444"' 'return Theme.error' \
+          --replace-quiet 'return "#ffaa00"' 'return Theme.warning' \
+          --replace-quiet 'return Theme.primary' 'return Theme.widgetIconColor'
+        ${assertPatched "$out/DankDiskUsageWidget.qml" "size: root.iconSize"}
+        ${assertPatchedLine "$out/DankDiskUsageWidget.qml" 312 "Theme.spacingXS"}
+        ${assertPatched "$out/DankDiskUsageWidget.qml" "return Theme.error"}
+        ${assertPatched "$out/DankDiskUsageWidget.qml" "return Theme.warning"}
+        ${assertPatched "$out/DankDiskUsageWidget.qml" "return Theme.widgetIconColor"}
+      '';
+
+      nixMonitorPatched = mkPatchedPlugin "nixMonitor" registryPlugins.nixMonitor ''
+        sed -i '110s/Theme\.primary$/Theme.widgetIconColor/' $out/NixMonitor.qml
+        ${assertPatchedLine "$out/NixMonitor.qml" 110 "Theme.widgetIconColor"}
+      '';
+
+      dankAsusControlCenterPatched = mkPatchedPlugin "dankAsusControlCenter" registryPlugins.dankAsusControlCenter ''
+        substituteInPlace $out/DankAsusControlCenter.qml \
+          --replace-quiet "size: root.showBatteryIcon ? 18 : Theme.iconSize * 0.85" "size: root.showBatteryIcon ? 18 : root.iconSize"
+        sed -i '521s/spacing: 4$/spacing: Theme.spacingXS/' $out/DankAsusControlCenter.qml
+        ${assertPatched "$out/DankAsusControlCenter.qml" "size: root.showBatteryIcon ? 18 : root.iconSize"}
+        ${assertPatchedLine "$out/DankAsusControlCenter.qml" 521 "Theme.spacingXS"}
+      '';
+
+      materialOSIcons = pkgs.stdenvNoCC.mkDerivation {
+        pname = "materialos-icon-theme";
+        version = "unstable-2026-08-27";
+        src = pkgs.fetchFromGitHub {
+          owner = "materialos";
+          repo = "Linux-Icon-Pack";
+          rev = "7ff36403cb38c0f5b7231df717a2efd373c94b6c";
+          hash = "sha256-iLhaCdH1RlElMoWvmArTcX+VUubcyIX5k9vHBV9rU9Q=";
+        };
+        installPhase = ''
+          mkdir -p $out/share/icons
+          cp -r Icons/MaterialOS $out/share/icons/MaterialOS
+        '';
+      };
+
+      vayoriRebuildScript = pkgs.writeShellScript "vayori-rebuild" ''
+        flakeDir=""
+        for d in "$HOME/vayori" "$HOME/dotfiles" "$HOME/.dotfiles" /etc/nixos; do
+          [ -f "$d/flake.nix" ] && flakeDir="$d" && break
+        done
+        if [ -z "$flakeDir" ]; then
+          echo "vayori flake not found (checked ~/vayori, ~/dotfiles, ~/.dotfiles, /etc/nixos) - edit rebuildCommand in dms.nix if it lives elsewhere"
+          exit 1
+        fi
+        exec nixos-rebuild switch --flake "$flakeDir#${config.networking.hostName}"
+      '';
+
+      vayoriGcScript = pkgs.writeShellScript "vayori-gc" "exec nix-collect-garbage -d";
     in
     {
+      security.sudo.extraRules = map
+        (name: {
+          users = [ name ];
+          commands = [
+            { command = "${vayoriRebuildScript}"; options = [ "NOPASSWD" ]; }
+            { command = "${vayoriGcScript}"; options = [ "NOPASSWD" ]; }
+          ];
+        })
+        (builtins.filter
+          (name: builtins.elem "wheel" config.vayori.users.${name}.extraGroups)
+          (builtins.attrNames config.vayori.users));
+
       home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
         imports = [
           inputs.dms.homeModules.dank-material-shell
           inputs.dms-plugin-registry.nixosModules.default
         ];
+        home.packages = [ materialOSIcons ];
+        home.sessionVariables.QS_ICON_THEME = "MaterialOS";
         xdg.configFile = {
           "DankMaterialShell/settings.json".force = true;
           "DankMaterialShell/plugin_settings.json".force = true;
+
+          "DankMaterialShell/plugins/NixMonitor/config.json" = {
+            force = true;
+            text = builtins.toJSON {
+              generationsCommand = [ "sh" "-c" "ls -d /nix/var/nix/profiles/per-user/$(whoami)/home-manager-*-link 2>/dev/null | wc -l" ];
+              storeSizeCommand = [ "sh" "-c" "du -sh /nix/store 2>/dev/null | cut -f1" ];
+              rebuildCommand = [ "sh" "-c" "sudo ${vayoriRebuildScript} 2>&1" ];
+              gcCommand = [ "sh" "-c" "sudo ${vayoriGcScript} 2>&1" ];
+              updateInterval = 300;
+            };
+          };
         };
         xdg.stateFile."DankMaterialShell/session.json" = {
           force = true;
           text = builtins.toJSON {
             configVersion = 4;
-            wallpaperPath = "${./../assets/wallpapers}/wallhaven-211op9.jpg";
+            wallpaperPath = "${./../assets/wallpapers}/wallhaven-w5xdzx.jpg";
             wallpaperCyclingFolderPath = "${./../assets/wallpapers}";
           };
         };
@@ -57,9 +162,63 @@
               };
             };
 
-            dankAsusControlCenter.enable = true;
+            dankAsusControlCenter = {
+              enable = true;
+              src = lib.mkForce dankAsusControlCenterPatched;
+              settings = {
+                showBatteryIcon = false;
+                useThemeColors = true;
+              };
+            };
 
-            dankQuickSearch.enable = true;
+            dankQuickSearch = {
+              enable = true;
+              settings = {
+                trigger = "!";
+                defaultEngine = "duckduckgo";
+              };
+            };
+
+            dankBitwarden = {
+              enable = true;
+              settings = {
+                trigger = "[";
+                noTrigger = false;
+                loginAction = "copy:password";
+                cardAction = "copy:number";
+                identityAction = "copy:name";
+                sshKeyAction = "copy:public_key";
+              };
+            };
+
+            spotifyMatugen.enable = true;
+
+            nixMonitor = {
+              enable = true;
+              src = lib.mkForce nixMonitorPatched;
+              settings = {
+                showGenerations = true;
+                showStoreSize = true;
+                gcThresholdGB = 50;
+                checkUpdates = true;
+                nixpkgsChannel = "nixos-unstable";
+                updateCheckInterval = 3600;
+              };
+            };
+
+            dankDiskUsage = {
+              enable = true;
+              src = lib.mkForce dankDiskUsagePatched;
+              settings = {
+                refreshInterval = 30;
+                warningThreshold = 80;
+                criticalThreshold = 95;
+                showPartitions = true;
+                showZfs = false;
+                showNixStore = false;
+                excludeMounts = [ ];
+              };
+            };
           };
 
           settings = {
@@ -113,9 +272,8 @@
 
             useFahrenheit = false;
             windSpeedUnit = "kmh";
-            useAutoLocation = false;
+            useAutoLocation = true;
             weatherEnabled = true;
-
             nightModeEnabled = false;
 
             animationSpeed = 1;
@@ -859,10 +1017,20 @@
                 ];
 
                 rightWidgets = [
+                  {
+                    id = "nixMonitor";
+                    enabled = true;
+                  }
                   "systemTray"
                   "clipboard"
                   "cpuUsage"
                   "memUsage"
+
+                  {
+                    id = "dankDiskUsage";
+                    enabled = true;
+                  }
+
                   "notificationButton"
 
                   {

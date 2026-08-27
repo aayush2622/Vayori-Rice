@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.nixosModules.grubTheme = { pkgs, ... }: {
+  flake.nixosModules.GrubTheme = { pkgs, ... }: {
     boot.loader.grub.theme = "${inputs.grub-theme}/SekiroShadow";
   };
 }

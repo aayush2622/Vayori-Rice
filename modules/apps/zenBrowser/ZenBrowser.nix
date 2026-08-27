@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps."zen-browser" = { pkgs, lib, vayoriTheme, ... }:
+  flake.homeModules.apps.ZenBrowser = { pkgs, lib, vayoriTheme, ... }:
   let
   theme = vayoriTheme;
 

@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps.terminal = { pkgs, vayoriTheme, ... }:
+  flake.homeModules.apps.Terminal = { pkgs, config, vayoriTheme, ... }:
   let
     theme = vayoriTheme;
 
@@ -106,6 +106,32 @@
       enableZshIntegration = true;
       icons = "auto";
       git = true;
+    };
+
+    home.packages = [ pkgs.cava ];
+
+    programs.btop = {
+      enable = true;
+      settings.color_theme = "matugen";
+    };
+
+    vayori.matugenTemplates = {
+      btop = ''
+        [templates.btop]
+        input_path = '${config.home.homeDirectory}/.config/matugen/templates/btop-matugen.theme'
+        output_path = '${config.home.homeDirectory}/.config/btop/themes/matugen.theme'
+      '';
+
+      cava = ''
+        [templates.cava]
+        input_path = '${config.home.homeDirectory}/.config/matugen/templates/cava-colors.ini'
+        output_path = '${config.home.homeDirectory}/.config/cava/config'
+      '';
+    };
+
+    home.file = {
+      ".config/matugen/templates/btop-matugen.theme".text = self.matugenTemplates.btop;
+      ".config/matugen/templates/cava-colors.ini".text = self.matugenTemplates.cava;
     };
 
     programs.starship = {

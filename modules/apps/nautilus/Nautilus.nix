@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps.nautilus = { pkgs, ... }: {
+  flake.homeModules.apps.Nautilus = { pkgs, ... }: {
     home.packages = with pkgs; [
       nautilus
 

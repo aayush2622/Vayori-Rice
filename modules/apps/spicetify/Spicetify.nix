@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps."spicetify" = { pkgs, config, vayoriTheme, ... }:
+  flake.homeModules.apps.Spicetify = { pkgs, config, vayoriTheme, ... }:
   let
     spicePkgs =
       inputs.spicetify-nix.legacyPackages.${pkgs.stdenv.hostPlatform.system};

@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps.gaming = { pkgs, lib, config, ... }:
+  flake.homeModules.apps.Gaming = { pkgs, lib, config, ... }:
   let
     gamesDir = "${config.home.homeDirectory}/Games";
     shaderCacheDir = "${gamesDir}/.cache/nv-shaders";
@@ -12,8 +12,11 @@
       exec ${pkgs.gamescope}/bin/gamescope -w 1600 -h 900 -W 1920 -H 1080 -F fsr -f --adaptive-sync -- "$@"
     '';
 
-    launchers = with pkgs; [ lutris heroic ];
-    protonTooling = with pkgs; [ umu-launcher protonup-qt winetricks protontricks ];
+    # Steam itself comes from `programs.steam.enable` in Host.nix (NixOS-level,
+    # handles 32-bit graphics libs, firewall, and controller udev rules) -
+    # adwsteamgtk is the client-side skin installer matugen themes below.
+    launchers = with pkgs; [ lutris heroic adwsteamgtk ];
+    protonTooling = with pkgs; [ umu-launcher protonup-qt winetricks protontricks wine ];
     overlayTooling = [ pkgs.gamescope gamescopeFhd gamescopeFsr ];
 
     mangoHudSettings = {
@@ -51,6 +54,36 @@
     home.file = {
       "Games/.keep".text = "";
       "Games/.cache/nv-shaders/.keep".text = "";
+
+      ".local/share/heroic-matugen-theme/matugen.json".text = builtins.toJSON {
+        name = "Matugen";
+        filename = "matugen.css";
+      };
+
+      ".config/matugen/templates/heroic-matugen.css".text = self.matugenTemplates.heroic;
+      ".config/matugen/templates/steam-colors.css".text = self.matugenTemplates.steam;
+      ".config/matugen/templates/wine-colors.reg".text = self.matugenTemplates.wine;
+    };
+
+    vayori.matugenTemplates = {
+      heroic = ''
+        [templates.heroic]
+        input_path = '${config.home.homeDirectory}/.config/matugen/templates/heroic-matugen.css'
+        output_path = '${config.home.homeDirectory}/.local/share/heroic-matugen-theme/matugen.css'
+      '';
+
+      steam = ''
+        [templates.steam]
+        input_path = '${config.home.homeDirectory}/.config/matugen/templates/steam-colors.css'
+        output_path = '${config.home.homeDirectory}/.config/AdwSteamGtk/custom.css'
+      '';
+
+      wine = ''
+        [templates.wine]
+        input_path = '${config.home.homeDirectory}/.config/matugen/templates/wine-colors.reg'
+        output_path = '/tmp/wine.reg'
+        post_hook = 'test -d "${gamesDir}/.wineprefix" && WINEPREFIX="${gamesDir}/.wineprefix" nohup wine regedit /tmp/wine.reg > /dev/null 2>&1 &'
+      '';
     };
 
     home.sessionVariables = {

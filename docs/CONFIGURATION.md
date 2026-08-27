@@ -15,31 +15,33 @@ reference, not the walkthrough.
 - [Project structure](#project-structure)
 
 **Core & hosts**
-- [core/users.nix](#modulescoreusersnix)
-- [hosts/\<name\>/host.nix](#moduleshostsnamehostnix)
+- [core/Users.nix](#modulescoreusersnix)
+- [hosts/\<name\>/Host.nix](#moduleshostsnamehostnix)
 - [hosts/\<name\>/\_hardware.nix](#moduleshostsname_hardwarenix)
-- [hosts/\<name\>/vm.nix](#moduleshostsnamevmnix)
+- [hosts/\<name\>/Vm.nix](#moduleshostsnamevmnix)
 
 **Desktop**
-- [desktop/dms.nix](#modulesdesktopdmsnix)
-- [desktop/niri.nix](#modulesdesktopnirinix)
-- [desktop/fonts.nix / portals.nix](#modulesdesktopfontsnix--portalsnix)
-- [desktop/baseline.nix](#modulesdesktopbaselinenix)
+- [desktop/Dms.nix](#modulesdesktopdmsnix)
+- [desktop/Niri.nix](#modulesdesktopnirinix)
+- [desktop/Fonts.nix / Portals.nix](#modulesdesktopfontsnix--portalsnix)
+- [desktop/Baseline.nix](#modulesdesktopbaselinenix)
+- [desktop/Matugen.nix](#modulesdesktopmatugennix)
 
 **System**
-- [system/dev-tooling.nix](#modulessystemdev-toolingnix)
-- [system/grub-theme.nix](#modulessystemgrub-themenix)
+- [system/DevTooling.nix](#modulessystemdev-toolingnix)
+- [system/GrubTheme.nix](#modulessystemgrub-themenix)
 
 **Apps**
-- [apps/zen-browser/zen-browser.nix](#modulesappszen-browserzen-browsernix)
-- [apps/spicetify/spicetify.nix](#modulesappsspicetifyspicetifynix)
-- [apps/gaming/gaming.nix](#modulesappsgaminggamingnix)
-- [apps/nautilus/nautilus.nix](#modulesappsnautilusnautilusnix)
-- [apps/android-studio/android-studio.nix](#modulesappsandroid-studioandroid-studionix)
-- [apps/vscode/vscode.nix](#modulesappsvscodevscodenix)
-- [apps/dev-tools/dev-tools.nix](#modulesappsdev-toolsdev-toolsnix)
-- [apps/bitwarden/bitwarden.nix](#modulesappsbitwardenbitwardennix)
-- [apps/terminal/terminal.nix](#modulesappsterminalterminalnix)
+- [apps/zenBrowser/ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix)
+- [apps/spicetify/Spicetify.nix](#modulesappsspicetifyspicetifynix)
+- [apps/gaming/Gaming.nix](#modulesappsgaminggamingnix)
+- [apps/nautilus/Nautilus.nix](#modulesappsnautilusnautilusnix)
+- [apps/androidStudio/AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)
+- [apps/vscode/Vscode.nix](#modulesappsvscodevscodenix)
+- [apps/devTools/DevTools.nix](#modulesappsdevtoolsdevtoolsnix)
+- [apps/bitwarden/Bitwarden.nix](#modulesappsbitwardenbitwardennix)
+- [apps/terminal/Terminal.nix](#modulesappsterminalterminalnix)
+- [apps/vesktop/Vesktop.nix](#modulesappsvesktopvesktopnix)
 
 ---
 
@@ -61,12 +63,12 @@ Two option namespaces get populated across these files:
 
 | Namespace | Set by | Read by |
 | --- | --- | --- |
-| `flake.nixosModules.*` | `hosts/`, `desktop/`, `system/`, `core/users.nix` | `host.nix`'s `modules` list |
-| `flake.homeModules.apps.*` | `modules/apps/*/*.nix` | `core/users.nix`, via `vayori.apps` |
+| `flake.nixosModules.*` | `hosts/`, `desktop/`, `system/`, `core/Users.nix` | `Host.nix`'s `modules` list |
+| `flake.homeModules.apps.*` | `modules/apps/*/*.nix` | `core/Users.nix`, via `vayori.apps` |
 
-All of the above is attribute-name-based, not path-based — `host.nix`
+All of the above is attribute-name-based, not path-based — `Host.nix`
 imports `self.nixosModules.dms`, never a file path. Moving a file to a
-different directory never requires touching `host.nix`'s `modules` list
+different directory never requires touching `Host.nix`'s `modules` list
 or `vayori.apps`, only a rename of the attribute itself would.
 
 ## Project structure
@@ -74,7 +76,7 @@ or `vayori.apps`, only a rename of the attribute itself would.
 ```
 modules/
   core/        flake-parts wiring + the shared user/app framework
-  hosts/<name>/  one machine: host.nix + _hardware.nix, nothing else
+  hosts/<name>/  one machine: Host.nix + _hardware.nix, nothing else
   desktop/     the DE stack — compositor, shell, login theme, fonts,
                portals, and the GTK/Qt baseline every user gets
   system/      system-level infra unrelated to the desktop
@@ -83,9 +85,9 @@ modules/
 ```
 
 `core`/`desktop`/`system` boundary, briefly: **core** is pure
-framework/wiring, nothing here is itself a "setting" (`parts.nix`,
-`registry.nix`, and the `vayori.users`/`vayori.apps` option definitions in
-`users.nix`). **desktop** is everything that makes this specific rice look
+framework/wiring, nothing here is itself a "setting" (`Parts.nix`,
+`Registry.nix`, and the `vayori.users`/`vayori.apps` option definitions in
+`Users.nix`). **desktop** is everything that makes this specific rice look
 and feel the way it does — swap the compositor or shell and this whole
 category changes. **system** is infra that doesn't care what desktop
 you're running (Docker, GRUB theming). The line between `desktop` and
@@ -101,7 +103,7 @@ restructuring it from a flat file into a folder.
 
 ---
 
-## `modules/hosts/<name>/host.nix`
+## `modules/hosts/<name>/Host.nix`
 
 **`vayori.theme`** is a submodule option declared inline here (not in a
 shared file like `vayori.users`/`vayori.apps` — it's a per-host preference,
@@ -112,11 +114,11 @@ everywhere at once — fontconfig, GTK, kitty, DMS all read the same option.
 
 NixOS modules read `config.vayori.theme.*` directly, like any option.
 Home-manager modules can't — they're a separate module instantiation that
-never sees the parent NixOS `config` — so `users.nix` re-exports it via
+never sees the parent NixOS `config` — so `Users.nix` re-exports it via
 `home-manager.extraSpecialArgs = { vayoriTheme = config.vayori.theme; };`.
 
 Not wired to `vayori.theme`: the SDDM greeter's bundled font and GRUB's
-theme package — see [fonts.nix / portals.nix](#modulesdesktopfontsnix--portalsnix).
+theme package — see [Fonts.nix / Portals.nix](#modulesdesktopfontsnix--portalsnix).
 
 **Two Nix gotchas hit while building this file:**
 
@@ -169,15 +171,18 @@ on real output.
 **Apps** (`vayori.apps`): pick from file names under `modules/apps/` — the
 one setting most new machines actually need to change.
 
+**`programs.steam.enable = true`** lives here, not in
+[Gaming.nix](#modulesappsgaminggamingnix) — see that section for why.
+
 **Users** (`vayori.users`): one entry per real account — see
-[core/users.nix](#modulescoreusersnix) for field meanings. Generate a
+[core/Users.nix](#modulescoreusersnix) for field meanings. Generate a
 password hash with `mkpasswd -m sha-512`.
 
 ## `modules/hosts/<name>/_hardware.nix`
 
 Unlike everything else under `modules/`, this is a **plain NixOS module** —
 no `flake.nixosModules.X` wrapper. The leading `_` makes import-tree skip
-it, so it's only reachable via `host.nix`'s `./_hardware.nix` import (a raw
+it, so it's only reachable via `Host.nix`'s `./_hardware.nix` import (a raw
 NixOS module's top-level keys like `boot`/`fileSystems` aren't valid
 flake-parts options on their own).
 
@@ -223,7 +228,7 @@ a real driver failure.
   is a straight name collision: whichever starts second silently loses
   profile switching.
 
-## `modules/hosts/<name>/vm.nix`
+## `modules/hosts/<name>/Vm.nix`
 
 Everything `virtualisation.vmVariant` touches lives here, not scattered
 across whichever file happens to reference the hardware it's disabling —
@@ -265,27 +270,27 @@ system, never sees `vmVariant` at all):
    `qemuWithHostGL` back to plain `pkgs.qemu_kvm` if this ever moves off
    this specific dev machine.
 
-## `modules/core/users.nix`
+## `modules/core/Users.nix`
 
 Shared framework — what a `vayori.users.<name>` entry can contain and how
-it becomes an account. Add a *person* inline in a host's `host.nix`; only
+it becomes an account. Add a *person* inline in a host's `Host.nix`; only
 touch this file to change what fields a user entry supports.
 
 - `hashedPassword`: generate with `mkpasswd -m sha-512`. `null` falls back
   to `initialPassword = "changeme"`.
 - `extraGroups`: `"wheel"` for sudo, `"adbusers"` for Android debugging
-  (see [android-studio.nix](#modulesappsandroid-studioandroid-studionix)).
+  (see [AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)).
 - `availableApps` auto-discovers from `modules/apps/*/*.nix` — add an app
   by dropping a folder there, nothing here changes.
 - Every user's `home-manager-<name>.service` gets
   `after`/`wants = [ "network-online.target" ]` here, generically — any
   app's activation script that touches the network (currently
-  [zen-browser.nix](#modulesappszen-browserzen-browsernix)'s mods/profile
+  [ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix)'s mods/profile
   fetch) would otherwise race the NIC coming up during boot.
 
 ---
 
-## `modules/desktop/dms.nix`
+## `modules/desktop/Dms.nix`
 
 **Applied to every user**, not hardcoded to one —
 `home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: { ... })`.
@@ -323,7 +328,7 @@ plugin still needs adding to a bar section (`leftWidgets`/`centerWidgets`/
   `supergfxctl` (GPU mode) —
   [shazzaam7/DankAsusControl](https://github.com/shazzaam7/DankAsusControl).
   Its dependencies (`asusctl`, `supergfxctl`, `upower`) are already
-  satisfied by [\_hardware.nix](#moduleshostsname_hardwarenix)/`host.nix`.
+  satisfied by [\_hardware.nix](#moduleshostsname_hardwarenix)/`Host.nix`.
   Switching GPU mode needs a session logout — the widget detects niri and
   handles this itself. Not verified against real ASUS hardware (no
   physical device to test in this sandbox) — if the popout can't reach the
@@ -347,8 +352,101 @@ plugin still needs adding to a bar section (`leftWidgets`/`centerWidgets`/
   icon (unlike the monitor plugins, whose descriptions explicitly say "in
   your DankBar"). Add it to a widget list too if it turns out to want its
   own entry.
+- **`dankBitwarden`**: needs `programs.rbw` set up separately (its own
+  vault client, unrelated to the `bitwarden-desktop` app) — searches
+  `rbw`'s entries, not the desktop app's. Default actions changed from
+  the plugin's own defaults (`autotype`/`type:number`) to
+  `copy:password`/`copy:number` — autotyping into whatever window happens
+  to be focused is a riskier default than clipboard-copy, which is what
+  Bitwarden's own UI defaults to.
+- **`spotifyMatugen`**: no settings component — its whole feature
+  ("lock DMS's dynamic colors to Spotify album art while playing") is the
+  entirety of what `enable = true` does; there's nothing else exposed.
+- **`nixMonitor`/`dankDiskUsage`/`dankAsusControlCenter` icon
+  theming**: third-party dms-plugin-registry plugins hand-roll their own
+  bar-pill layout instead of going through `BasePill` like DMS's built-in
+  widgets do, so nothing forces them to agree with each other on icon
+  size/spacing/color — confirmed by reading all three plugins' QML
+  directly against the built-in `CpuMonitor.qml`, and against the
+  [DMS plugin dev docs](https://danklinux.com/docs/dankmaterialshell/plugin-development)
+  (`Theme.primary`/`Theme.iconSize` is the documented convention).
+  `registryPlugins` (a `pkgs.callPackage` of the registry's own
+  `nix/default.nix`) is patched via `runCommand` + `substituteInPlace`/
+  targeted `sed`, then wired back in via `plugins.<id>.src = lib.mkForce
+  <patched>` — in place, not replaced, so `plugin_settings.json`/updates
+  from the registry still apply to everything else normally:
+  - `dankDiskUsageWidget.qml` used `Theme.fontSizeLarge` (a font-size
+    constant) for its icon instead of `root.iconSize`
+    (`PluginComponent`'s own bar-aware size, backed by
+    `Theme.barIconSize(...)` — what `nixMonitor` already used
+    correctly), and `Theme.spacingS` instead of `Theme.spacingXS` for its
+    icon/text row (line 312 only — every other `Theme.spacingS` in that
+    file is unrelated popout-content spacing). Its `usageColor()`
+    function also returned `Theme.primary` at baseline (an accent color,
+    not the neutral `Theme.widgetIconColor` every other bar icon uses at
+    rest — this was the actual "different from everything else" color)
+    and hardcoded hex for the alert thresholds (`#ff4444`/`#ffaa00`),
+    bypassing matugen entirely instead of `Theme.error`/`Theme.warning`.
+    Kept the alert behavior itself (icon/text go red/orange past a
+    threshold) — mirrors `CpuMonitor`'s own convention exactly, just
+    fixed what each state actually points at.
+  - `NixMonitor.qml`'s spacing/icon size were already correct; only its
+    baseline color needed the same `Theme.primary` →
+    `Theme.widgetIconColor` fix (line 110), keeping the `Theme.error`
+    override past `gcThresholdGB`.
+  - `DankAsusControlCenter.qml`'s color already resolved correctly
+    (`useThemeColors = true` → `Theme.primary`, matching the documented
+    convention) — only size (`Theme.iconSize * 0.85`, a fixed 24px
+    ignoring bar thickness) and spacing (a raw hardcoded `spacing: 4`,
+    line 521 only) needed the same `root.iconSize`/`Theme.spacingXS`
+    treatment.
+- **`dankDiskUsage.showNixStore = false`**: `nixMonitor` already reports
+  Nix store size — both default to showing it, which would report it
+  twice. `showZfs = false` too — `_hardware.nix` is btrfs, not ZFS,
+  nothing to ever show there.
+- **`dankAsusControlCenter.showBatteryIcon = false`**: battery % already
+  lives in the separate `"battery"` bar widget — showing it here too
+  would duplicate it.
+- **`nixMonitor`'s Rebuild/GC buttons read their commands from
+  `~/.config/DankMaterialShell/plugins/NixMonitor/config.json`**, not
+  `plugin_settings.json`/the standard settings mechanism above at all —
+  confirmed by reading `NixMonitor.qml` directly (`updateInterval` is
+  peculiarly the one property *only* this file reaches; the settings UI
+  offers a slider for it, but the underlying `QML` property isn't wired
+  to `pluginData` the way its neighbors are). Researched how the plugin
+  is actually meant to be used
+  ([antonjah/nix-monitor](https://github.com/antonjah/nix-monitor)) — it
+  has its own real-time console panel ("Appears automatically when
+  running Rebuild or GC. Shows real-time stdout/stderr.") that a plain
+  `sudo ... 2>&1` streams into directly; no terminal wrapper needed or
+  wanted. That only works headlessly if `sudo` doesn't need a TTY to
+  prompt in, hence `security.sudo.extraRules` below.
+  - The flake's real clone location on whatever machine this actually
+    runs on isn't something Nix can know at eval time — `rebuildCommand`
+    searches `~/vayori`, `~/dotfiles`, `~/.dotfiles`, `/etc/nixos` at
+    runtime instead of hardcoding a single guess, and errors clearly if
+    none match rather than silently doing nothing. The host name *is*
+    known at eval time (`config.networking.hostName`) — no guessing
+    needed there.
+- **`security.sudo.extraRules`**: `NOPASSWD`, but scoped to exactly
+  `nixos-rebuild`/`nix-collect-garbage` (any arguments) for every
+  `vayori.users` entry — not blanket passwordless sudo. Everything else
+  still needs a real password; this exists purely so nixMonitor's two
+  buttons can run without a TTY to prompt in.
+- **`materialOSIcons`**: not in nixpkgs, fetched straight from
+  [materialos/Linux-Icon-Pack](https://github.com/materialos/Linux-Icon-Pack)
+  (verified against the actual repo: a real `index.theme`, 1704 app
+  icons, `Inherits=gnome,hicolor` for graceful fallback on anything
+  missing). Scoped to DMS's own app launcher only, via
+  `home.sessionVariables.QS_ICON_THEME = "MaterialOS"` — per
+  [DMS's own icon-theming docs](https://danklinux.com/docs/dankmaterialshell/icon-theming),
+  that env var overrides DMS's icon theme independently of the
+  system-wide GTK/Qt one (Papirus, set in
+  [Baseline.nix](#modulesdesktopbaselinenix)), so this doesn't touch
+  Nautilus or any other app. Static, read-only install is fine here —
+  unlike Papirus, nothing needs to rewrite it at runtime.
 
-## `modules/desktop/niri.nix`
+## `modules/desktop/Niri.nix`
 
 **`extraSettings` must be a sibling of `settings`**, not nested inside it —
 nesting it serializes as a literal invalid KDL node instead of using the
@@ -376,12 +474,12 @@ here). Near-identical visually, cheaper to run.
 since they pipe `dms ipc call brightness list` through `awk`.
 
 `binds` is a named `niriBinds` in a `let`, not inlined into `settings` —
-same reasoning as `gaming.nix`'s named bindings: a ~90-line keymap reads
+same reasoning as `Gaming.nix`'s named bindings: a ~90-line keymap reads
 easier as its own thing than buried three levels into the `packages.myNiri`
 attrset. Purely cosmetic — the built `myNiri` derivation hash is unchanged
 by this, confirmed by rebuilding before/after.
 
-## `modules/desktop/fonts.nix` / `portals.nix`
+## `modules/desktop/Fonts.nix` / `Portals.nix`
 
 - `nerd-fonts.jetbrains-mono`: kitty + bar monospace glyphs.
 - `material-symbols`: DMS's icon font.
@@ -398,13 +496,28 @@ changing that means shipping a different `.ttf`, not a settings tweak. Qt
 apps also aren't covered — their font comes from qt6ct's own config, which
 DMS's `matugenTemplateQt6ct`/`matugenTemplateQt5ct` already manages.
 
-## `modules/desktop/baseline.nix`
+## `modules/desktop/Baseline.nix`
 
 Imported for every user regardless of `vayori.apps` — GTK/Qt theming is
 the one piece of the rice nobody opts out of. Lives under `desktop/`, not
 `apps/`, for exactly that reason: it isn't an opt-in app pick, it's part
 of what makes this desktop this desktop.
 
+- **`options.vayori.matugenTemplates` + the merged `config.toml`**: this
+  is where DMS's own documented custom-template mechanism
+  ([Application Theming](https://danklinux.com/docs/dankmaterialshell/application-themes))
+  is actually assembled. Every themed app in this repo contributes one
+  `[templates.<id>]` TOML block (`input_path`/`output_path`, optionally
+  `post_hook`) to `vayori.matugenTemplates.<name>`; `Baseline.nix` merges
+  all of them under a single `[config]` header and writes the result to
+  `~/.config/quickshell/dms/matugen/config.toml` — the exact file DMS's
+  docs describe, not a per-plugin directory. The option has to be a real
+  top-level `options`/`config` split, not mixed into the implicit-config
+  `mkMerge` list below it — Nix doesn't declare a genuine option
+  otherwise, it just becomes config data under a literal path (hit this
+  once while building it). The template *content* each app points its
+  `input_path` at lives in a separate shared file, not here — see
+  [Matugen.nix](#modulesdesktopmatugennix).
 - **`gtk.theme` (adw-gtk3) was missing entirely** — `iconTheme`/
   `cursorTheme`/`font` were always set, but no `gtk.theme.name`/`package`
   at all, so GTK3 apps had no explicit base theme and fell back to
@@ -447,27 +560,132 @@ of what makes this desktop this desktop.
   session env vars (some apps read these directly rather than parsing
   the file themselves) - explicit for the same reason as `gtk4.theme`,
   silencing the same class of stateVersion-driven default-change warning.
+- **GTK matugen theming works via a plain `@import`**: DMS's matugen GTK
+  templates always write `dank-colors.css` (no detection gate on the
+  write side — confirmed in `core/internal/matugen/matugen.go`,
+  `TemplateKindGTK`'s `appendConfig` call passes `nil` check lists, which
+  `appExists` treats as "unconditional"), but GTK itself only auto-loads
+  `gtk.css` — nothing imports the generated file without
+  `gtk.gtk3.extraCss`/`gtk4.extraCss` setting exactly that. It also
+  doubles as the *read* side of DMS's own `isDMSGTKActive()` gate, which
+  checks for this exact `"dank-colors.css"` substring before firing live
+  GTK refresh signals on each matugen run.
+- **`qt.platformTheme.name = "qtct"` with no `style.name` override**: an
+  earlier `style.name = "kvantum"` set `QT_STYLE_OVERRIDE=kvantum`, which
+  forces every Qt app onto Kvantum's own separate SVG theme regardless of
+  `platformTheme` — and matugen only ever generates qt5ct/qt6ct's native
+  palette format, no Kvantum template exists. Leaving `style` unset lets
+  qt5ct/qt6ct's own palette (`qt5ct.conf`/`qt6ct.conf`, below) actually
+  apply.
+- **`qt5ct.conf`/`qt6ct.conf`'s `color_scheme_path`**: matugen writes the
+  palette itself (`~/.config/qt{5,6}ct/colors/matugen.conf`, rewritten on
+  every wallpaper change) but never points qt5ct/qt6ct *at* it — same
+  "updates an existing setup, never installs one" pattern as everywhere
+  else DMS integrates. This pointer is the one-time setup matugen assumes
+  already exists (its own `refreshQt6ct()` just touches this file's
+  mtime to nudge already-running apps, it never writes the file).
+- **Papirus is a mutable, per-user copy, not the Nix-store package
+  directly** (`home.activation.installPapirusIconTheme`, copying
+  `theme.iconPackage`'s `share/icons/Papirus` into
+  `~/.local/share/icons/Papirus`): `papirus-folders` (the tool that
+  recolors Papirus's folder icons to match the current accent)
+  rewrites the theme's own `index.theme` + folder icon symlinks in
+  place — confirmed by reading its actual script:
+  `get_theme_dir()` checks `[ -w "$THEME_DIR/..." ]` and only re-execs
+  under `sudo` if that fails, which is impossible against the read-only
+  `/nix/store` copy `gtk.iconTheme.package` installs. The same script
+  also searches `$XDG_DATA_HOME/icons` (`~/.local/share/icons`) *before*
+  any Nix-store path, so this copy wins automatically — no search-path
+  conflict with the read-only one GTK/Qt still reference by name.
+- **Dynamic folder-color recoloring** (`vayori.matugenTemplates.papirusFolders`,
+  one of the `[templates.<id>]` blocks merged into `config.toml` above):
+  matugen has real, built-in support for driving `papirus-folders`
+  (confirmed against the installed matugen 4.1.0 binary directly:
+  `input_path`, `colors_to_compare`, `compare_to`, and `post_hook` are
+  all real, documented config keys, not DMS-specific). Picks the
+  `colors_to_compare` entry closest to the current primary accent and
+  runs `papirus-folders` with it as the `post_hook` — `input_path` just
+  needs to *exist* (an empty file at
+  `~/.config/matugen/templates/papirus-color`), matugen
+  never reads its content for this case; the actual work happens in
+  `post_hook`. No `sudo` — targets the writable copy above directly by
+  path, which `papirus-folders` can edit as the regular user.
+
+## `modules/desktop/Matugen.nix`
+
+`flake.matugenTemplates` — one plain attrset, one attribute per themed
+app (`btop`, `cava`, `heroic`, `steam`, `wine`, `vesktop`,
+`androidStudio`), each holding the raw template *content* (a btop theme
+file, a cava INI, a CSS stylesheet, a Windows `.reg` file, an IntelliJ
+`.icls` scheme) that would otherwise be duplicated inline in every app
+module. Needs its own
+`options.flake.matugenTemplates = lib.mkOption { ... };` declaration, the
+same way `modules/core/Registry.nix` declares one for `flake.homeModules`
+— it isn't one of flake-parts' built-in known flake outputs, so nothing
+merges it in without an explicit option (shows up as a harmless "unknown
+flake output 'matugenTemplates'" notice from `nix flake check` —
+informational only, not a failure).
+
+Each app module reads its own entry straight off `self` — `self` is
+already in scope as the outer flake-parts module argument
+(`{ self, inputs, ... }: { flake.homeModules.apps.X = { pkgs, ... }: ...
+self.matugenTemplates.X ... }`), and the inner home-manager module
+function closes over it lexically; no extra plumbing needed (the same
+pattern this repo already used for `inputs.*` inside these modules
+before this file existed). An app module still owns:
+
+- writing that content to its own file under
+  `~/.config/matugen/templates/` (the *input* matugen reads from — this
+  path is entirely our own choice, matugen doesn't care where
+  `input_path` lives, so it's the short, conventional location matching
+  DMS's own doc example — only the merged `config.toml` itself has to
+  live at DMS's mandated `~/.config/quickshell/dms/matugen/config.toml`,
+  see [Baseline.nix](#modulesdesktopbaselinenix)),
+- registering the `[templates.<id>]` block itself in
+  `vayori.matugenTemplates` (the *output* path, and any `post_hook` —
+  these are runtime/`config.home.homeDirectory`-dependent, so they can't
+  be plain shared strings the way the template bodies can).
+
+**`androidStudio` is a function, not a plain string** — `schemeName: ''
+...''` — because the `.icls` scheme needs its own name baked into itself
+(`metaInfo/originalScheme`, the `<scheme name="...">` attribute), a value
+[AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix) already
+computes locally for three other reasons (the output filename, the
+`global_color_scheme` XML pointer). Called as
+`self.matugenTemplates.androidStudio matugenSchemeName` — still a "public
+variable," just one that takes an argument, rather than duplicating the
+scheme name as a separate hardcoded literal in two files.
+
+Every template body here except `vesktop` was ported from
+[InioX/matugen-themes](https://github.com/InioX/matugen-themes) and kept
+byte-for-byte as published (only the file's own path/wiring is
+repo-specific) — `vesktop` has no InioX equivalent, it's the real
+machine's own curated QuickCSS theme with matugen values spliced in, see
+its own section for why. See each app's own section for per-app caveats
+(Cava/Btop under [Terminal.nix](#modulesappsterminalterminalnix), Heroic/
+Steam/Wine under [Gaming.nix](#modulesappsgaminggamingnix), Vesktop under
+[Vesktop.nix](#modulesappsvesktopvesktopnix)).
 
 ---
 
-## `modules/system/dev-tooling.nix`
+## `modules/system/DevTooling.nix`
 
 Named for what it actually is — system-level enablement for development
 workflows, not tied to any one app. Renamed from `dev-system.nix` during
 the project restructure specifically to stop reading as a near-duplicate
-of [apps/dev-tools/dev-tools.nix](#modulesappsdev-toolsdev-toolsnix) (a
+of [apps/devTools/DevTools.nix](#modulesappsdevtoolsdevtoolsnix) (a
 completely different, per-user file — VS Code/git/gh/lazygit/
 docker-compose). `virtualisation.docker.enable`/`libvirtd.enable` are
 the actual system daemons `dev-tools`' `docker-compose` and any VM
 tooling need. `programs.adb.enable` was removed upstream — systemd 258+
 handles the adb uaccess udev rules automatically, and
 `pkgs.android-tools` (already in
-[android-studio.nix](#modulesappsandroid-studioandroid-studionix)) covers
+[AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)) covers
 the `adb` command itself — `users.groups.adbusers` stays declared here
 purely as a valid `extraGroups` entry, it no longer grants anything on
 its own.
 
-## `modules/system/grub-theme.nix`
+## `modules/system/GrubTheme.nix`
 
 `grub-theme` is a plain repo meant to be installed via its own shell
 script, not a Nix package. This module fetches its source via the flake
@@ -480,7 +698,7 @@ first rebuild — if GRUB doesn't pick it up, `ls ${inputs.grub-theme}` in
 
 ---
 
-## `modules/apps/zen-browser/zen-browser.nix`
+## `modules/apps/zenBrowser/ZenBrowser.nix`
 
 **The profile is always `~/.zen/default`** — a fixed, predictable path
 this repo owns, rather than discovering/importing whatever a previous
@@ -555,7 +773,7 @@ it's reused and re-synced on every `home-manager switch`.
     a network-less machine still apply the rest of the config) — found by
     actually booting a fresh VM and checking, not assumed.
 
-## `modules/apps/spicetify/spicetify.nix`
+## `modules/apps/spicetify/Spicetify.nix`
 
 **Custom font**: Spotify's client CSS reads its UI font from the
 `--font-family` custom property, not generic `font-family: sans-serif` —
@@ -565,13 +783,20 @@ explicit dependency of the spiced Spotify derivation. `spicePkgs.themes.hazy
 // { ... }` merges onto the theme's existing options — `theme` accepts a
 freeform attrset, so this is safe.
 
-## `modules/apps/gaming/gaming.nix`
+## `modules/apps/gaming/Gaming.nix`
 
 One file, one `vayori.apps` toggle, for everything Windows-gaming related —
-`lutris` + `heroic` as the two launchers, plus shared tooling. No Steam —
-`proton-ge-bin` in nixpkgs refuses to install outside
-`programs.steam.extraCompatPackages`; `umu-launcher` is the Steam-free
-substitute (Lutris's native "Proton" runner, manages GE-Proton itself).
+`lutris` + `heroic` as the two launchers, Steam alongside them, plus
+shared tooling.
+
+- **Steam itself is enabled in `Host.nix`, not here**:
+  `programs.steam.enable = true` is a NixOS-level option (32-bit
+  graphics libs, firewall rules for Remote Play/in-home streaming,
+  controller udev rules) — a per-user home-manager module can't set any
+  of that, so it doesn't belong in this file even though every other
+  launcher does. `umu-launcher` stays too — it's Lutris's native
+  "Proton" runner (manages GE-Proton itself) and has nothing to do with
+  Steam being present or not.
 
 - **One games folder, one shared prefix**: `home.file` creates `~/Games`;
   `WINEPREFIX = ~/Games/.wineprefix`. Covers *plain* `wine`/`winetricks`
@@ -613,7 +838,7 @@ substitute (Lutris's native "Proton" runner, manages GE-Proton itself).
   pickers/Nautilus) if not already present. Appends, not
   declarative-replaces — that file accumulates whatever else you drag into
   the sidebar, and shouldn't be owned/reset wholesale for one entry.
-- **`programs.gamemode.enable = true`** lives in `host.nix`, not here —
+- **`programs.gamemode.enable = true`** lives in `Host.nix`, not here —
   it's a system-wide daemon (systemd *user* service + polkit +
   `cap_sys_nice` wrapper), not a per-user concern. Any launcher running
   games through `gamemoderun` (Lutris does, automatically) picks it up for
@@ -627,8 +852,45 @@ substitute (Lutris's native "Proton" runner, manages GE-Proton itself).
   launch-option prefix, e.g. `nvidia-offload gamemoderun -- %command%`. The
   `dankAsusControlCenter` DMS widget's "GPU Mode" switch does the same
   thing at the whole-laptop level instead of per-launch.
+- **Heroic matugen theme**: content (`self.matugenTemplates.heroic`)
+  ported from [InioX/matugen-themes](https://github.com/InioX/matugen-themes),
+  registered as `vayori.matugenTemplates.heroic` — DMS's documented
+  custom-template mechanism, same as every other app here (see
+  [Baseline.nix](#modulesdesktopbaselinenix)/
+  [Matugen.nix](#modulesdesktopmatugennix)). Heroic has no fixed theme
+  path — it only supports a user-configured "custom themes folder"
+  (`customThemesPath`, set once in Settings → Accessibility) containing a
+  `.css` + matching `.json` metadata pair. This writes both to
+  `~/.local/share/heroic-matugen-theme/` (the `.json` is static, the
+  `.css` is matugen-rewritten on every wallpaper change), but **does
+  not** touch Heroic's own `config.json` to point `customThemesPath`
+  there or auto-select the theme — its settings schema isn't fully
+  documented publicly, and guessing wrong risks corrupting a real
+  settings file other than just failing to theme. Point Heroic at the
+  folder and pick "Matugen" from the theme dropdown once, manually.
+- **Steam matugen theme, via AdwSteamGtk**: Steam's own UI has no
+  supported custom-CSS hook; `pkgs.adwsteamgtk` (added to
+  `home.packages` here) is the community skin installer that patches
+  Steam's client UI to read `~/.config/AdwSteamGtk/custom.css` — the
+  exact path `vayori.matugenTemplates.steam` writes to, content
+  (`self.matugenTemplates.steam`) ported from InioX unmodified. Same
+  one-time manual step as Heroic: run `adwsteamgtk` once (installs/
+  updates the skin into Steam's own directory) — matugen keeps the CSS
+  it reads recolored automatically after that.
+- **Wine matugen theme**: `vayori.matugenTemplates.wine` writes a
+  templated `.reg` file (content `self.matugenTemplates.wine`, InioX's
+  unmodified — Win32 Control Panel colors plus disabling window
+  decorations/enabling classic theme, for native apps that still read
+  system colors) to `/tmp/wine.reg`, matching InioX's own documented
+  path, then its `post_hook` imports it with `wine regedit` against this
+  file's own shared prefix (`${gamesDir}/.wineprefix`, the same one
+  `WINEPREFIX` below points at) — gated behind `test -d` so it's a no-op
+  until that prefix actually exists (e.g. before first running anything
+  through plain `wine`/`winetricks`). Only covers that shared prefix, not
+  Lutris/Heroic's own independently-managed per-game ones, for the same
+  reason `WINEPREFIX` itself doesn't reach them (see below).
 
-## `modules/apps/nautilus/nautilus.nix`
+## `modules/apps/nautilus/Nautilus.nix`
 
 - `thumbnail-limit = 200`: thumbnail bigger files instead of a generic
   icon.
@@ -640,10 +902,10 @@ substitute (Lutris's native "Proton" runner, manages GE-Proton itself).
   auto-run scripts.
 - `nautilus-open-any-terminal` defaults to gnome-terminal (not installed
   here) — pointed at kitty instead.
-- gvfs + tumbler are enabled system-wide in `host.nix` — they're daemons,
+- gvfs + tumbler are enabled system-wide in `Host.nix` — they're daemons,
   not per-user.
 
-## `modules/apps/android-studio/android-studio.nix`
+## `modules/apps/androidStudio/AndroidStudio.nix`
 
 `adb` device access works out of the box (systemd 258+ handles uaccess
 udev rules automatically) — `"adbusers"` in `extraGroups` is optional
@@ -689,8 +951,22 @@ activation time:
 - The 5 XML files under `.config/Google/<dataDirectoryName>/options/`
   (font, LAF, color scheme, One Dark config, Vim emulation) are a
   straight transcription of the real machine's own files at that path.
+- **Matugen-driven editor color scheme** (`DankMatugen`, replacing the
+  static "One Dark" default): registers a `[templates.androidStudio]`
+  block in `vayori.matugenTemplates` — DMS's own documented custom-
+  template mechanism, assembled in
+  [Baseline.nix](#modulesdesktopbaselinenix) — since DMS has no built-in
+  JetBrains/Android Studio matugen integration at all, this is a
+  from-scratch template. The `.icls` body itself is a shared, public
+  value (`self.matugenTemplates.androidStudio matugenSchemeName`, a
+  function of the scheme name — see
+  [Matugen.nix](#modulesdesktopmatugennix)), not inlined here. The
+  generated `.icls` file itself is deliberately *not* declared as a
+  `home.file` — matugen writes `matugenOutputPath` itself at runtime, on
+  every wallpaper change, and home-manager would just fight it for
+  ownership of that file otherwise.
 
-## `modules/apps/vscode/vscode.nix`
+## `modules/apps/vscode/Vscode.nix`
 
 `programs.vscode.profiles.default` (`userSettings`, `keybindings`,
 `extensions`), the current home-manager schema — not the older flat
@@ -707,17 +983,42 @@ keybinding (`ctrl+y` unbound from `editor.action.deleteLines`), and all
   content hash from `nix store prefetch-file` against the Marketplace's
   VSIX asset URL.
 
-VSCode itself moved out of `dev-tools.nix` into its own module once it
-needed this much dedicated configuration — `dev-tools.nix` keeps only
+VSCode itself moved out of `DevTools.nix` into its own module once it
+needed this much dedicated configuration — `DevTools.nix` keeps only
 `gh`, `lazygit`, `docker-compose`.
 
-## `modules/apps/dev-tools/dev-tools.nix`
+- **The DMS theme extension (`DankLinux.dms-theme`) is installed as a
+  real, writable copy via `home.activation`, not through
+  `programs.vscode.profiles.default.extensions`**: DMS bundles this vsix
+  itself (`matugenTemplateVscode = true`, in
+  [Dms.nix](#modulesdesktopdmsnix)) and rewrites its `themes/*.json` on
+  every wallpaper change (`appendVSCodeConfig` in
+  `core/internal/matugen/matugen.go` writes straight into the installed
+  extension's own directory) — but DMS never installs the vsix itself,
+  only keeps an already-installed copy's theme files updated
+  (`checkVSCodeExtension` there is purely a detection/UI check, confirmed
+  by reading the source). The standard `extensions` list can't be used
+  for it either: that symlinks straight into the read-only `/nix/store`,
+  so matugen's writes would fail — hence the real copy instead, version
+  tracked against DMS's own `vsix-build/package.json`.
+- **The installed directory name must be lowercase
+  `danklinux.dms-theme-<version>`**, even though the vsix's own
+  `package.json` declares `"publisher": "DankLinux"` —
+  `appendVSCodeConfig` globs for `extBaseDir/danklinux.dms-theme-*`
+  verbatim (matching VSCode's own real `code --install-extension`
+  convention of lowercasing the publisher for the on-disk id). Confirmed
+  by booting this in a real VM: the capitalized version silently never
+  matched, so matugen's write never actually ran — the theme file just
+  held the vsix's own static bundled default the whole time, not a
+  live-updated one.
+
+## `modules/apps/devTools/DevTools.nix`
 
 `git` isn't listed here — it's already in `environment.systemPackages`
-(`host.nix`), since flakes need it system-wide regardless of which apps
+(`Host.nix`), since flakes need it system-wide regardless of which apps
 are picked.
 
-## `modules/apps/bitwarden/bitwarden.nix`
+## `modules/apps/bitwarden/Bitwarden.nix`
 
 Just `pkgs.bitwarden-desktop` — the nixpkgs attribute name is
 `bitwarden-desktop`, not `bitwarden` (that alias throws a
@@ -725,14 +1026,25 @@ renamed-package error). Added so a fresh install has a working password
 manager without a manual first-run setup step; vault contents still
 require signing in once, syncing pulls everything else back down.
 
-## `modules/apps/terminal/terminal.nix`
+**`programs.rbw`** is a separate CLI vault client from the desktop app
+above — it's what the `dankBitwarden` DMS launcher plugin
+([Dms.nix](#modulesdesktopdmsnix)) actually shells out to, an unrelated
+session from the desktop app's own login. `settings.email` has no
+default and is required by home-manager's own `rbw` module, so it's left
+unset here pending the real account email — `rbw config set email
+<you>` once, then `rbw login`, gets it working without needing a
+rebuild. Once known, it can be set declaratively instead: `programs.rbw
+= { enable = true; settings = { email = "you@example.com"; pinentry =
+pkgs.pinentry-gtk2; }; };`.
+
+## `modules/apps/terminal/Terminal.nix`
 
 Kitty + zsh (oh-my-zsh) + fastfetch + Starship + eza, one selectable app.
 `initContent` picks a random logo from `modules/apps/terminal/images/`
 per shell (falls back to fastfetch's default if the directory is empty).
 The zsh plugin list and fastfetch's `modules` array are named `let`
 bindings (`zshPlugins`, `fastfetchModules`) rather than inlined — same
-reasoning as `niri.nix`'s `niriBinds`, purely readability, verified
+reasoning as `Niri.nix`'s `niriBinds`, purely readability, verified
 identical output by rebuilding before/after.
 
 - **Prompt is Starship, not a hand-rolled `precmd`**: the previous prompt
@@ -749,3 +1061,115 @@ identical output by rebuilding before/after.
   `ls`/`la`/`ll`/`lla`/`lt` - automatically, confirmed in the built
   `.zshrc`), not added as a separate command alongside it - the goal was
   a better `ls`, not a second tool to remember.
+- **`programs.btop` + a matugen theme**: `btop` used to be a bare
+  `environment.systemPackages` entry with no config at all -
+  `programs.btop.settings.color_theme = "matugen"` tells it to look for
+  a theme literally named `matugen`, which the registered
+  `vayori.matugenTemplates.btop` block (content from
+  [Matugen.nix](#modulesdesktopmatugennix), ported from
+  [InioX/matugen-themes](https://github.com/InioX/matugen-themes))
+  writes to `~/.config/btop/themes/matugen.theme` on every wallpaper
+  change - deliberately *not* declared through home-manager's own
+  `programs.btop.themes` option, since that writes a static, Nix-store-immutable
+  file and would fight matugen for ownership of it, the same class of
+  problem solved for GTK/Qt/Android Studio earlier.
+- **`cava`**: no home-manager `programs.cava` module used here — cava has
+  only one config file (no separate "theme" vs. "settings" split like
+  btop), so matugen is given full ownership of it outright rather than
+  fighting a home-manager-managed immutable symlink for the same path.
+  `vayori.matugenTemplates.cava` points straight at
+  `~/.config/cava/config`; the content (`self.matugenTemplates.cava`,
+  from [Matugen.nix](#modulesdesktopmatugennix)) is InioX's `[color]`
+  block unmodified — cava fills in every other setting (bars, framerate,
+  ...) with its own built-in defaults for anything the file doesn't
+  mention.
+- **Spicetify (Spotify) and Starship were deliberately skipped** when
+  wiring up matugen from InioX/matugen-themes, even though both apps are
+  covered there: `spicetify/spicetify.nix`'s theme (`hazy`,
+  `colorScheme = "Base"`) and `starshipSettings` here are both direct,
+  hand-extracted transcriptions of the real machine's actual config (see
+  [spicetify.nix](#modulesappsspicetifyspicetifynix) and the Starship
+  note above) - InioX's templates are a completely different theme/
+  prompt layout for each, not just different colors, and there's no
+  clean way to splice in just a dynamic palette without restructuring
+  what was deliberately extracted "as it is." Blanket-applying matugen
+  everywhere isn't the goal; not clobbering curated settings is a bigger
+  priority than covering every app InioX supports.
+
+## `modules/apps/vesktop/Vesktop.nix`
+
+Two real config files pinned straight off the reference machine, plus a
+matugen-driven theme — same "capture what's actually there, don't guess"
+approach as [AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix).
+Declared as plain Nix attrsets (`vesktopSettings`, `vencordSettings`,
+`vencordPlugins`), written out with `builtins.toJSON` — not two static
+`.json` files copied in — so the settings live and read as ordinary Nix
+data like everywhere else in this repo, not as opaque blobs.
+
+- **`vencordSettings`/`vencordPlugins`**: Vencord's own
+  `settings/settings.json` — every plugin actually enabled on the real
+  machine (and any non-default settings on them, e.g.
+  `BlurNSFW.blurAmount`, `MessageLogger`'s ignore lists). Unlike Android
+  Studio's JetBrains plugins, none of this needed fetching — every
+  Vencord plugin ships built into the app itself; "installing" one is
+  just flipping `enabled = true;` here, nothing external to pin.
+- **`vesktopSettings`**: Vesktop's own separate, smaller settings block
+  (tray behavior, Discord update branch, spellcheck languages, splash
+  screen colors) — a different file at a different path
+  (`~/.config/vesktop/settings.json`, not `.../settings/settings.json`),
+  captured the same way.
+- **Plain `{ enabled = false; }` plugin entries are omitted, not
+  transcribed** — of the real machine's ~172 plugins, only 68 are kept
+  (everything actually `enabled = true`, everything with non-default
+  settings regardless of enabled state, and the "*API" framework
+  plugins kept explicit either way — see below). This is a verified
+  no-op, not a guess: Vencord's own `src/api/Settings.ts`
+  (`getDefaultValue`) resolves a *missing* plugin entry to
+  `plugins[key].required || plugins[key].enabledByDefault || false` —
+  i.e. `false` for any plugin not itself marked required/enabled-by-
+  default in its own source. Checked Vencord's actual plugin source
+  (not the docs) for every plugin with a static `required: true` or
+  `enabledByDefault: true` — `DisableDeepLinks`, `BadgeAPI`,
+  `CrashHandler`, `WebContextMenus`, `WebKeybinds`,
+  `WebScreenShareFixes` — and every one of them is already `enabled =
+  true` here, so the omission changes nothing observable. The "*API"
+  plugins (`ChatInputButtonAPI`, `CommandsAPI`, ...) are kept explicit
+  regardless — including the two disabled ones, `MessagePopoverAPI`/
+  `ServerListAPI` — as a deliberate margin: they're framework plugins
+  other plugins hook into, and nothing in Vencord's settings-resolution
+  code rules out some *other* enabled plugin's dependency graph
+  eventually mattering here, so keeping all twelve explicit costs
+  little and removes the question entirely.
+- **`home.file` + `force = true`**, not a plain `.text`/`.source`
+  without it: Vesktop rewrites both of these itself whenever a setting
+  is toggled through its own UI, so without `force` a rebuild would
+  refuse to overwrite a file it no longer recognizes as home-manager's
+  own. Same trade-off already accepted elsewhere in this repo for
+  exactly this reason (DMS's `settings.json`, Lutris's
+  `runners/wine.yml`) — an in-app change sticks until the next rebuild,
+  then resets to what's declared here.
+- **QuickCSS + matugen**: the real machine's `settings/quickCss.css` was
+  already a curated theme, not a blank slate — DiscordRecolor
+  (mwittrien/BetterDiscordAddons), an `@import` plus a `:root` block of
+  hardcoded `R,G,B` custom properties, plus a scrollbar-styling block.
+  Rather than treat this like Spicetify/Starship (skip it entirely, too
+  curated to touch) or like Heroic/Steam (drop in InioX's template
+  as-is, no InioX Vesktop template exists anyway), the real file's
+  *structure* is kept byte-for-byte in
+  [Matugen.nix](#modulesdesktopmatugennix) — same `@import`, same
+  scrollbar rule and comments — and only the `:root` values it exposes
+  for exactly this purpose are swapped from their original hardcoded
+  triples to matugen ones. DiscordRecolor's variable contract doesn't
+  map onto Material's roles 1:1 (it wants a 6-step text-brightness ramp
+  and a 4-step background-elevation ramp; Material gives named semantic
+  roles, not a ramp) — mapped by apparent intent: on_background →
+  on_surface → on_surface_variant → outline → outline_variant →
+  surface_container_highest for the text ramp (brightest to darkest),
+  background/surface_container* for the background ramp
+  (primary_container for the accent-tinted one, ascending surface
+  containers for the rest). `--settingsicons` is a style-mode flag, not
+  a color — left as the original's literal `0`. `quickCss.css` itself is
+  deliberately *not* a `home.file` — matugen owns it outright, rewritten
+  on every wallpaper change, same as every other app's matugen output in
+  this repo; `useQuickCss = true;` in `vencordSettings` (already true on
+  the real machine) is what makes Vesktop actually load it.

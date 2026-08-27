@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.nixosModules.sddmTheme = { pkgs, ... }:
+  flake.nixosModules.SddmTheme = { pkgs, ... }:
 
 let
   womenUmbrella = pkgs.stdenvNoCC.mkDerivation {

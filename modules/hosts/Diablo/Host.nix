@@ -4,15 +4,15 @@
     modules = [
       inputs.home-manager.nixosModules.home-manager
 
-      self.nixosModules.vayoriUsers
-      self.nixosModules.niri
-      self.nixosModules.dms
-      self.nixosModules.fonts
-      self.nixosModules.portals
-      self.nixosModules.sddmTheme
-      self.nixosModules.grubTheme
-      self.nixosModules.devTooling
-      self.nixosModules.vmTesting
+      self.nixosModules.VayoriUsers
+      self.nixosModules.Niri
+      self.nixosModules.Dms
+      self.nixosModules.Fonts
+      self.nixosModules.Portals
+      self.nixosModules.SddmTheme
+      self.nixosModules.GrubTheme
+      self.nixosModules.DevTooling
+      self.nixosModules.VmTesting
 
       ./_hardware.nix
 
@@ -54,12 +54,12 @@
 
               iconTheme = lib.mkOption {
                 type = lib.types.str;
-                default = "Tela-circle";
+                default = "Papirus";
                 description = "GTK icon theme name.";
               };
               iconPackage = lib.mkOption {
                 type = lib.types.package;
-                default = pkgs.tela-circle-icon-theme;
+                default = pkgs.papirus-icon-theme;
                 description = "Package providing `iconTheme`.";
               };
             };
@@ -81,16 +81,16 @@
           };
 
           vayori.apps = [
-            "terminal"
-            "nautilus"
-            "zen-browser"
-            "vesktop"
-            "android-studio"
-            "spicetify"
-            "dev-tools"
-            "gaming"
-            "bitwarden"
-            "vscode"
+            "Terminal"
+            "Nautilus"
+            "ZenBrowser"
+            "Vesktop"
+            "AndroidStudio"
+            "Spicetify"
+            "DevTools"
+            "Gaming"
+            "Bitwarden"
+            "Vscode"
           ];
 
           nix.settings.experimental-features = [ "nix-command" "flakes" ];
@@ -143,6 +143,7 @@
           services.printing.enable = true;
 
           programs.gamemode.enable = true;
+          programs.steam.enable = true;
 
           services.pulseaudio.enable = false;
           security.rtkit.enable = true;

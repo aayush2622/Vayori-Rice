@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps.vscode = { pkgs, lib, vayoriTheme, ... }:
+  flake.homeModules.apps.Vscode = { pkgs, lib, vayoriTheme, ... }:
   let
     nixpkgsExtensions = with pkgs.vscode-extensions; [
       anthropic.claude-code
@@ -171,26 +171,6 @@
       }
     ];
 
-    # DMS bundles this vsix itself (matugenTemplateVscode = true, in
-    # desktop/dms.nix) and rewrites its themes/*.json on every wallpaper
-    # change (core/internal/matugen/matugen.go: appendVSCodeConfig writes
-    # straight into the installed extension's own directory) - but DMS
-    # never installs the vsix itself, only keeps an already-installed
-    # copy's theme files updated (checkVSCodeExtension there is purely a
-    # detection/UI check, confirmed by reading the source). It can't go
-    # through programs.vscode.profiles.default.extensions either: that
-    # symlinks straight into the read-only /nix/store, so matugen's writes
-    # would fail. Installed as a real, writable copy via home.activation
-    # instead - version has to track DMS's own vsix-build/package.json.
-    #
-    # Directory name MUST be lowercase "danklinux..." even though the vsix's
-    # own package.json declares "publisher": "DankLinux" - appendVSCodeConfig
-    # globs for extBaseDir/danklinux.dms-theme-* verbatim (matches VSCode's
-    # own real `code --install-extension` convention of lowercasing the
-    # publisher for the on-disk id). Confirmed by booting this in a real VM:
-    # the capitalized version silently never matched, so matugen's write
-    # never actually ran - the file just held the vsix's own static default
-    # colors the whole time, not a live-updated theme.
     dmsVscodeThemeVersion = "0.0.3";
     dmsVscodeThemeExtId = "danklinux.dms-theme-${dmsVscodeThemeVersion}";
     dmsVscodeThemeSrc = pkgs.runCommand "dms-theme-vscode-extension" { } ''
