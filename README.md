@@ -67,6 +67,12 @@ file in the right folder" - see [Extending it](#extending-it).
   Lutris + Heroic, GE-Proton via umu-launcher, gamescope presets,
   restyled MangoHud - Steam, Heroic, Vesktop, and even Wine's own
   dialogs pick up the current matugen palette too).
+- [Free Claude Code](https://github.com/Alishahryar1/free-claude-code)
+  runs as a background service, routing Claude Code's CLI, its VS Code
+  extension, and Android Studio's JetBrains ACP integration through
+  free-tier model providers (NVIDIA NIM by default) instead of
+  Anthropic's paid API - needs a one-time free API key, see
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md#modulesappsfreeclaudecodefreeclaudecodenix).
 - ASUS ROG-specific: a DankBar widget
   ([DankAsusControl](https://github.com/shazzaam7/DankAsusControl)) for
   switching power profiles and GPU mode (Integrated/Hybrid/Dedicated)

@@ -42,6 +42,7 @@ reference, not the walkthrough.
 - [apps/bitwarden/Bitwarden.nix](#modulesappsbitwardenbitwardennix)
 - [apps/terminal/Terminal.nix](#modulesappsterminalterminalnix)
 - [apps/vesktop/Vesktop.nix](#modulesappsvesktopvesktopnix)
+- [apps/freeClaudeCode/FreeClaudeCode.nix](#modulesappsfreeclaudecodefreeclaudecodenix)
 
 ---
 
@@ -510,14 +511,33 @@ of what makes this desktop this desktop.
   `[templates.<id>]` TOML block (`input_path`/`output_path`, optionally
   `post_hook`) to `vayori.matugenTemplates.<name>`; `Baseline.nix` merges
   all of them under a single `[config]` header and writes the result to
-  `~/.config/quickshell/dms/matugen/config.toml` — the exact file DMS's
-  docs describe, not a per-plugin directory. The option has to be a real
-  top-level `options`/`config` split, not mixed into the implicit-config
-  `mkMerge` list below it — Nix doesn't declare a genuine option
-  otherwise, it just becomes config data under a literal path (hit this
-  once while building it). The template *content* each app points its
-  `input_path` at lives in a separate shared file, not here — see
+  `~/.config/matugen/config.toml` — the literal path and format DMS's
+  own docs show. The option has to be a real top-level `options`/`config`
+  split, not mixed into the implicit-config `mkMerge` list below it —
+  Nix doesn't declare a genuine option otherwise, it just becomes config
+  data under a literal path (hit this once while building it). The
+  template *content* each app points its `input_path` at lives in a
+  separate shared file, not here — see
   [Matugen.nix](#modulesdesktopmatugennix).
+- **No trigger is wired up here — none is needed.** An earlier version
+  of this file wrote the merged config to
+  `~/.config/quickshell/dms/matugen/config.toml` (assumed to be DMS's
+  real config dir, not its docs' literal path) and, on live VM testing
+  against *that* path, found DMS's own wallpaper-change/`theme toggle`
+  handling only regenerated its built-in templates, never this repo's
+  custom ones — so a `home.activation`/`systemd.user` trigger was added
+  to force it via a direct `dms matugen generate` call. That whole
+  premise was wrong: re-tested against `~/.config/matugen/config.toml`
+  (this file's real, documented path) and DMS's own live
+  `wallpaper set`/`theme toggle` handling regenerates every custom
+  template correctly and automatically, with no extra machinery at
+  all - confirmed by clearing every custom output file, triggering a
+  plain `dms ipc call theme toggle`, and watching all six reappear
+  within seconds with fresh, correctly-recolored content. The earlier
+  "DMS doesn't apply user templates live" conclusion was really "DMS
+  doesn't read `config.toml` from a location it never looks at" -
+  obvious in hindsight, but only actually confirmed by testing the
+  right path, not the wrong one more carefully.
 - **`gtk.theme` (adw-gtk3) was missing entirely** — `iconTheme`/
   `cursorTheme`/`font` were always set, but no `gtk.theme.name`/`package`
   at all, so GTK3 apps had no explicit base theme and fell back to
@@ -637,10 +657,9 @@ before this file existed). An app module still owns:
 - writing that content to its own file under
   `~/.config/matugen/templates/` (the *input* matugen reads from — this
   path is entirely our own choice, matugen doesn't care where
-  `input_path` lives, so it's the short, conventional location matching
-  DMS's own doc example — only the merged `config.toml` itself has to
-  live at DMS's mandated `~/.config/quickshell/dms/matugen/config.toml`,
-  see [Baseline.nix](#modulesdesktopbaselinenix)),
+  `input_path` lives — the merged `config.toml` itself lives right next
+  to it, at `~/.config/matugen/config.toml`, see
+  [Baseline.nix](#modulesdesktopbaselinenix)),
 - registering the `[templates.<id>]` block itself in
   `vayori.matugenTemplates` (the *output* path, and any `post_hook` —
   these are runtime/`config.home.homeDirectory`-dependent, so they can't
@@ -741,6 +760,40 @@ it's reused and re-synced on every `home-manager switch`.
   it fails with "no DISPLAY" when run headless from a systemd activation
   service — wrapped in `pkgs.xvfb-run` (a throwaway virtual X server)
   specifically for this.
+- **That same command is wrapped in `timeout 120s`**, and every `curl`
+  call in this file has `--max-time 15` — a real bug, not a
+  precaution: a Firefox-based `-CreateProfile` invocation doesn't
+  always exit cleanly under Xvfb (no real GPU, telemetry/update
+  checks with nothing to talk to), and with no bound on it, an
+  activation script that hangs waiting for it blocks
+  `home-manager-ash.service` indefinitely - the entire rebuild, not
+  just Zen Browser's own setup. Confirmed as a genuine failure mode
+  (not just a theoretical one) while testing this repo's activation
+  scripts more broadly; `curl`'s own `--retry 2` doesn't bound total
+  time the way `--max-time` does, so both needed the same fix. An
+  earlier, tighter 45s bound turned out to be too tight on a
+  resource-constrained VM - `-CreateProfile` legitimately needs longer
+  than that under Xvfb with no real GPU, so it got killed before
+  finishing, not because it was actually stuck.
+- **Completion is checked via `$PROFILE_DIR/times.json`, not `-d
+  $PROFILE_DIR`** — a bare directory-exists check has a real failure
+  mode: if `timeout` kills `-CreateProfile` partway through, it can
+  leave a half-created profile directory behind, and a directory-only
+  check would then treat that broken state as "already done" forever,
+  never retrying. `times.json` is a file Firefox/Zen only ever writes
+  once profile creation genuinely finishes, so a killed attempt leaves
+  no false-positive behind — the next rebuild retries properly instead
+  of silently skipping mods/settings every time after.
+- **The script `echo`s progress at every step** (profile creation
+  starting/done/timed-out, mods index fetch, each mod by name) rather
+  than running silently — these lines aren't gated behind `$DRY_RUN_CMD`
+  since they're pure output, and they show up live in a normal
+  interactive `nixos-rebuild switch`/`home-manager switch` (home-manager
+  streams its own activation output to the terminal), not just in
+  `journalctl`. The point: a slow-but-working `-CreateProfile` and a
+  genuinely stuck one look identical from the outside with no output at
+  all - this makes the difference visible instead of just picking a
+  bigger timeout and hoping.
 - **Zen Mods** (`zenMods`, in the same activation script — theming,
   `user.js`, and mods all need the same resolved `$PROFILE_DIR`) — traced
   through Zen's actual source (`ZenMods.mjs`) rather than guessed:
@@ -1176,3 +1229,126 @@ data like everywhere else in this repo, not as opaque blobs.
   on every wallpaper change, same as every other app's matugen output in
   this repo; `useQuickCss = true;` in `vencordSettings` (already true on
   the real machine) is what makes Vesktop actually load it.
+
+## `modules/apps/freeClaudeCode/FreeClaudeCode.nix`
+
+Wires [Free Claude Code](https://github.com/Alishahryar1/free-claude-code)
+(FCC) — a local proxy that lets Claude Code's CLI/extensions talk to
+non-Anthropic model providers (NVIDIA NIM by default, matching upstream's
+own documented Quick Start) instead of Anthropic's API — into the CLI,
+the already-installed VS Code extension
+([Vscode.nix](#modulesappsvscodevscodenix)), and Android Studio's
+already-installed plugin
+([AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)).
+
+- **Not a from-scratch Nix derivation, deliberately**: FCC requires
+  Python 3.14+ and pulls in ~20 dependencies (several, like `httpx2` and
+  `nvidia-riva-client`, aren't packaged in nixpkgs), and moves fast
+  enough that hash-pinning the whole closure would need constant
+  upkeep. Instead: `pkgs.uv` is installed declaratively, and the actual
+  `git clone`/`uv sync` work happens in its own
+  `systemd.user.services.free-claude-code-bootstrap` (`Type = "oneshot"`) —
+  `uv` manages the Python interpreter itself, nothing extra needed in
+  `home.packages` for that. Same trade-off already made for Zen
+  Browser's mods/profile fetch
+  ([ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix)) — a real
+  network dependency for something too fast-moving to fully pin, not
+  the norm elsewhere in this repo.
+- **The bootstrap unit is deliberately *not* run inline in
+  `home.activation`** — it was, originally, and that was a real bug:
+  `uv sync` downloading Python 3.14 plus ~20 packages ran synchronously
+  inside `home-manager-ash.service` itself, so the entire rebuild
+  blocked on it (and, on a slow link, could run past home-manager's own
+  default 5-minute activation timeout and kill the *whole* activation,
+  not just this one app). Confirmed live: `home-manager-ash.service`
+  hit exactly that "Read-only file system"-adjacent failure mode in
+  testing. Fixed by moving the heavy work to
+  `free-claude-code-bootstrap.service` and having
+  `home.activation.freeClaudeCodeSetup` only kick it off with
+  `systemctl --user --no-block restart free-claude-code.service` —
+  activation returns immediately regardless of how long the clone/sync
+  takes. `free-claude-code.service` declares
+  `Wants`/`After = free-claude-code-bootstrap.service`, so starting the
+  server always waits for a real, finished sync first, whether that
+  start comes from activation's non-blocking kick or from
+  `WantedBy = default.target` on a later login.
+- **`fcc-server` runs as a `systemd.user` service**
+  (`free-claude-code.service`, `WantedBy = [ "default.target" ]`), not
+  launched manually — `ExecStart` points straight at the venv `uv sync`
+  creates (`.venv/bin/fcc-server` inside the cloned repo).
+  `Restart = "on-failure"` / `RestartSec = 10` / a 20-attempt,
+  5-minute `StartLimit` window are deliberately generous — a leftover
+  safety net from before the bootstrap split, kept because it's cheap
+  insurance against any future slow first start.
+- **`core/Users.nix`'s `home-manager-<name>.service` gets
+  `TimeoutStartSec = lib.mkForce "10min"`** — home-manager's own module
+  defaults this to 5 minutes; bumped as a general safety margin for any
+  slow synchronous activation step (Papirus's icon copy on a slow
+  filesystem, say), not specifically because of FCC anymore now that
+  its own heavy work no longer runs inline - but there's no reason to
+  revert it, either.
+- **`~/.fcc/.env` is seeded once, never overwritten** — confirmed
+  against FCC's own source (`config/paths.py`, `managed_env_path()`)
+  that this exact path, not the cloned repo's own `.env`, is what the
+  running server actually reads its live config from and what its
+  Admin UI writes provider keys back into. Force-declaring this file
+  the way Vesktop's settings are would fight the Admin UI for ownership
+  and wipe out a pasted-in API key on every rebuild, so it's only
+  written if absent (`[ -f ... ] || cp ...`), same idempotent-seed
+  pattern as Baseline.nix's Papirus icon copy. The seed sets
+  `MODEL`/`PROXY_AUTH_ENABLED`/`ANTHROPIC_AUTH_TOKEN`/
+  `FCC_OPEN_BROWSER=false` (no point popping a browser tab from a
+  background service) and leaves `NVIDIA_NIM_API_KEY` commented out —
+  getting one is a manual step by necessity (an API key can't be
+  generated by this repo, and wouldn't belong committed to it even if
+  it could) — build one free at
+  [build.nvidia.com/settings/api-keys](https://build.nvidia.com/settings/api-keys)
+  and either paste it into that line or set it through FCC's own Admin
+  UI. Any other provider `.env.example` documents works too; NVIDIA NIM
+  is just upstream's own default, not a hardcoded requirement.
+- **`~/.claude.json`'s `hasCompletedOnboarding: true`**: documented by
+  upstream as the fix for Claude Code still prompting a real Anthropic
+  login even after the FCC URL/token are set. Merged in via `jq`, not a
+  plain `home.file`, because this file is Claude Code's own real state
+  (auth, project history) — a full overwrite would either destroy that
+  or fight the CLI for ownership of a file it writes to constantly.
+  Idempotent either way: creates `{}` first if the file doesn't exist
+  yet, then merges the one key in on every rebuild without touching
+  anything else already there.
+- **`~/.jetbrains/acp.json`**: same reasoning, `jq`-merged rather than
+  declared — this is JetBrains' own IDE-wide registry of external ACP
+  (Agent Client Protocol) agents, potentially listing other agents
+  entirely unrelated to Claude. The merge only ever touches
+  `.acp.registry."claude-acp".env`, additively (`(existing // {}) +
+  new`), so it can't clobber another registered agent or wipe fields
+  the IDE itself puts on this same entry when Claude ACP is first
+  enabled. Verified this merge behaves correctly both against an empty
+  file and one with unrelated pre-existing content, not just assumed.
+- **This targets JetBrains' generic ACP mechanism specifically, not
+  necessarily the already-installed `com.anthropic.code.plugin`
+  itself** (Anthropic's own dedicated JetBrains plugin, pinned in
+  AndroidStudio.nix) — upstream's README only documents the ACP path
+  for JetBrains IDEs, and whether that dedicated plugin reads the same
+  `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env vars (plausible, since
+  it likely wraps the same `claude` CLI under the hood, but not
+  something checkable without decompiling a closed-source plugin jar or
+  live-testing against a real IDE session) is genuinely unverified. If
+  Android Studio's own Claude panel still prompts a login after this,
+  check its own Settings for a custom-endpoint field, or enable Claude
+  through the IDE's built-in AI Assistant/Agent settings first so it
+  registers the `claude-acp` entry this activation script then patches.
+- **Deliberately not wired system-wide**: `ANTHROPIC_BASE_URL`/
+  `ANTHROPIC_AUTH_TOKEN` are set only inside VS Code's own
+  `claudeCode.environmentVariables` and the JetBrains ACP registry —
+  never as a `home.sessionVariables` entry. Doing that would redirect
+  *every* terminal's `claude` invocation through FCC too, silently
+  breaking real authenticated Claude Code CLI usage anywhere else it's
+  used. `fcc-claude` (FCC's own launcher, installed alongside
+  `fcc-server`) is the deliberate opt-in path for terminal use instead
+  — it sets these env vars only for itself, leaving the real `claude`
+  binary untouched.
+- **Only Claude Code is wired up** — FCC's own installer also offers
+  Codex, Pi, OpenCode, Cline, Hermes, DeepSeek Harness, Grok, Muse, and
+  Aider, each with their own third-party installer script it'd run by
+  default. None of that runs here; only `fcc-server`'s own dependencies
+  get installed.

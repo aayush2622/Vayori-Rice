@@ -91,6 +91,7 @@
       systemd.services = lib.mapAttrs' (name: u: lib.nameValuePair "home-manager-${name}" {
         after = [ "network-online.target" ];
         wants = [ "network-online.target" ];
+        serviceConfig.TimeoutStartSec = lib.mkForce "30sec";
       }) cfg;
     };
   };

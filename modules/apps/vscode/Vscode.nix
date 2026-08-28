@@ -157,6 +157,16 @@
       "C_Cpp.clang_format_fallbackStyle" = "Google";
 
       "claudeCode.preferredLocation" = "panel";
+      "claudeCode.disableLoginPrompt" = true;
+      "claudeCode.environmentVariables" = [
+        { name = "ANTHROPIC_BASE_URL"; value = "http://localhost:8082"; }
+        { name = "ANTHROPIC_AUTH_TOKEN"; value = "freecc"; }
+        { name = "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"; value = "1"; }
+        { name = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"; value = "190000"; }
+        { name = "DISABLE_AUTOUPDATER"; value = "1"; }
+        { name = "DISABLE_FEEDBACK_COMMAND"; value = "1"; }
+        { name = "DISABLE_ERROR_REPORTING"; value = "1"; }
+      ];
 
       "git.enableSmartCommit" = true;
       "git.autofetch" = true;

@@ -91,6 +91,7 @@
             "Gaming"
             "Bitwarden"
             "Vscode"
+            "FreeClaudeCode"
           ];
 
           nix.settings.experimental-features = [ "nix-command" "flakes" ];
@@ -144,6 +145,7 @@
 
           programs.gamemode.enable = true;
           programs.steam.enable = true;
+          programs.nix-ld.enable = true;
 
           services.pulseaudio.enable = false;
           security.rtkit.enable = true;

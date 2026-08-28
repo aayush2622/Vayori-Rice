@@ -159,35 +159,54 @@
 
     home.activation.zenBrowserConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     fetch_if_missing() {
-      [ -f "$1" ] || $DRY_RUN_CMD ${pkgs.curl}/bin/curl -fsSL --retry 2 -o "$1" "$2" || true
+      if [ -f "$1" ]; then
+        echo "  already have $3, skipping"
+      else
+        echo "  downloading $3..."
+        $DRY_RUN_CMD ${pkgs.curl}/bin/curl -fsSL --retry 2 --max-time 15 -o "$1" "$2" || true
+      fi
     }
 
     ZEN_BASE="$HOME/.zen"
     PROFILE_DIR="$ZEN_BASE/default"
     $DRY_RUN_CMD mkdir -p "$ZEN_BASE"
-    [ -d "$PROFILE_DIR" ] || $DRY_RUN_CMD ${pkgs.xvfb-run}/bin/xvfb-run -a ${lib.getExe zen-browser} -CreateProfile "default $PROFILE_DIR" >/dev/null 2>&1 || true
+    if [ -f "$PROFILE_DIR/times.json" ]; then
+      echo "Zen profile already exists, skipping -CreateProfile"
+    else
+      echo "Creating Zen Browser profile (launches the browser once under a virtual display, up to 120s)..."
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/timeout 120s ${pkgs.xvfb-run}/bin/xvfb-run -a ${lib.getExe zen-browser} -CreateProfile "default $PROFILE_DIR" >/dev/null 2>&1 || true
+      if [ -f "$PROFILE_DIR/times.json" ]; then
+        echo "Zen profile created."
+      else
+        echo "Zen profile creation did not finish in time - mods/settings will be skipped this run, retried next rebuild."
+      fi
+    fi
 
-    if [ -d "$PROFILE_DIR" ]; then
+    if [ -f "$PROFILE_DIR/times.json" ]; then
     $DRY_RUN_CMD mkdir -p "$PROFILE_DIR/chrome"
     $DRY_RUN_CMD ln -sf "$HOME/.config/DankMaterialShell/zen.css" "$PROFILE_DIR/chrome/userChrome.css"
     $DRY_RUN_CMD ln -sf ${zenUserJs} "$PROFILE_DIR/user.js"
 
+    echo "Fetching Zen mods index..."
     ZEN_MODS_INDEX="$(mktemp)"
-    if $DRY_RUN_CMD ${pkgs.curl}/bin/curl -fsSL --retry 2 -o "$ZEN_MODS_INDEX" "${zenModsIndexUrl}"; then
+    if $DRY_RUN_CMD ${pkgs.curl}/bin/curl -fsSL --retry 2 --max-time 15 -o "$ZEN_MODS_INDEX" "${zenModsIndexUrl}"; then
     $DRY_RUN_CMD ${pkgs.jq}/bin/jq --argjson ids ${lib.escapeShellArg (builtins.toJSON (builtins.attrValues zenMods))} '
     to_entries
     | map(select(.key as $k | $ids | index($k) != null))
     | map(.value += {enabled: true})
     | from_entries
     ' "$ZEN_MODS_INDEX" > "$PROFILE_DIR/zen-themes.json"
+    else
+    echo "  could not reach the mods index, skipping"
     fi
     rm -f "$ZEN_MODS_INDEX"
 
-    ${lib.concatMapStringsSep "\n" (id: ''
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: id: ''
+        echo "Zen mod: ${name}"
         $DRY_RUN_CMD mkdir -p "$PROFILE_DIR/chrome/zen-themes/${id}"
-        fetch_if_missing "$PROFILE_DIR/chrome/zen-themes/${id}/chrome.css" "${zenModsBaseUrl}/${id}/chrome.css"
-        fetch_if_missing "$PROFILE_DIR/chrome/zen-themes/${id}/preferences.json" "${zenModsBaseUrl}/${id}/preferences.json"
-        '') (builtins.attrValues zenMods)}
+        fetch_if_missing "$PROFILE_DIR/chrome/zen-themes/${id}/chrome.css" "${zenModsBaseUrl}/${id}/chrome.css" "${name} (chrome.css)"
+        fetch_if_missing "$PROFILE_DIR/chrome/zen-themes/${id}/preferences.json" "${zenModsBaseUrl}/${id}/preferences.json" "${name} (preferences.json)"
+        '') zenMods)}
         fi
         '';
       };

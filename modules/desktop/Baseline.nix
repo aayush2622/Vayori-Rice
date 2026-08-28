@@ -11,19 +11,19 @@
       default = { };
       description = ''
         Extra matugen templates, one `[templates.<id>]` TOML block per
-        entry, merged into a single ~/.config/quickshell/dms/matugen/config.toml
-        - the file DMS's own docs document
+        entry, merged into a single ~/.config/matugen/config.toml -
+        exactly the file and format DMS's own docs document
         (https://danklinux.com/docs/dankmaterialshell/application-themes).
         `input_path`/`output_path` are absolute paths of the app module's
         own choosing (only this merged config.toml itself has to live at
-        this exact, DMS-mandated location - see Matugen.nix for where
-        the template bodies these blocks point at actually live).
+        this exact path - see Matugen.nix for where the template bodies
+        these blocks point at actually live).
       '';
     };
 
     config = lib.mkMerge [
       {
-        home.file.".config/quickshell/dms/matugen/config.toml".text =
+        home.file.".config/matugen/config.toml".text =
           "[config]\n\n" + lib.concatStringsSep "\n" (lib.attrValues config.vayori.matugenTemplates);
 
         gtk = {
