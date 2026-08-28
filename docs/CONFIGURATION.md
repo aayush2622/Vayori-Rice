@@ -16,6 +16,7 @@ reference, not the walkthrough.
 
 **Core & hosts**
 - [core/Users.nix](#modulescoreusersnix)
+- [core/PluginUpdateCheck.nix](#modulescorepluginupdatechecknix)
 - [hosts/\<name\>/Host.nix](#moduleshostsnamehostnix)
 - [hosts/\<name\>/\_hardware.nix](#moduleshostsname_hardwarenix)
 - [hosts/\<name\>/Vm.nix](#moduleshostsnamevmnix)
@@ -288,6 +289,112 @@ touch this file to change what fields a user entry supports.
   app's activation script that touches the network (currently
   [ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix)'s mods/profile
   fetch) would otherwise race the NIC coming up during boot.
+
+---
+
+## `modules/core/PluginUpdateCheck.nix`
+
+A check-only, zero-extra-commands plugin/extension update reporter for
+[Vscode.nix](#modulesappsvscodevscodenix),
+[AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix), and
+[ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix). It never modifies a
+pin itself - it only prints what's stale so you can bump the version/hash
+by hand in the matching app file.
+
+- **Where the pins come from**: each of the three app files hoists its
+  pinned-plugin list out of its home-manager module into the file's outer
+  `let`, then publishes it as `flake.pluginPins.<AppName>` (same
+  public-data pattern as
+  [Matugen.nix](#modulesdesktopmatugennix)'s `flake.matugenTemplates`,
+  requiring the same kind of `options.flake.pluginPins` declaration -
+  that lives in `modules/core/PluginPins.nix`). The home-manager module
+  then just references the outer binding (`marketplaceExtensions =
+  extensionsFromVscodeMarketplace marketplaceExtensionsSpec;`, etc.), so
+  this refactor changes nothing about what gets installed - confirmed by
+  rebuilding the toplevel and activation packages before and after and
+  getting the same derivations.
+- **Keys are `PascalCase`, matching `self.homeModules.apps`'s own
+  attribute names exactly** (`Vscode`, `AndroidStudio`, `ZenBrowser`) -
+  not the lowerCamelCase used for the *files'* folder names - so
+  filtering pins down to "only the apps this host actually has enabled"
+  is a plain `lib.filterAttrs (name: _: builtins.elem name
+  config.vayori.apps)` with no translation table.
+- **`environment.etc."vayori/plugin-pins.json"`**: that filtered result,
+  serialized with `builtins.toJSON`, landing at
+  `/etc/vayori/plugin-pins.json`. System-wide (not per-user) because
+  `vayori.apps` itself is host-wide, and it keeps the checker script
+  independent of which user's shell triggers it.
+- **`ZenBrowser`'s pins have no version to compare against** - every
+  extension/mod is always installed at whatever's currently `/latest/`
+  (AMO's install URL, the theme-store's raw file), there's nothing
+  pinned to diff. So for this app the checker instead confirms the
+  `slug`/mod id still *resolves* (a 404 from AMO, or an id missing from
+  the theme-store's `themes.json` index, means the add-on/mod was
+  renamed or pulled) - existence-checking, not version-checking.
+- **The checker itself is a stdlib-only Python script**
+  (`pkgs.writers.writePython3Bin`, so it goes through `flake8` at build
+  time - every line had to actually pass lint, not just parse), built as
+  `vayori-check-plugin-updates` and put on `$PATH` via
+  `environment.systemPackages`. No `requests` dependency - just
+  `urllib.request` + a `ThreadPoolExecutor` so all ~60-odd checks (21
+  VS Code + 17 Android Studio + 17 Zen extensions + 8 Zen mods on this
+  host) run concurrently instead of one network round-trip at a time.
+  - VS Code: one POST per extension to the Marketplace's
+    `extensionquery` API (`filterType 7` = exact `publisher.name`
+    lookup, `flags 513` = versions + latest-only), comparing the
+    pinned `version` against `versions[0].version` in the response.
+  - Android Studio: `GET /plugins/list?pluginId=<xmlId>` on the
+    JetBrains Marketplace's legacy repository endpoint - the modern
+    `/api/plugins/<id>/updates` REST endpoint only accepts a *numeric*
+    plugin id, not the string `xmlId` these pins actually store (e.g.
+    `com.github.catppuccin.jetbrains`, `PythonCore`), and returns a 400
+    for every entry in this repo when tried; confirmed by curling it
+    directly before committing to the fix. The XML response lists every
+    published release of the plugin with an `updatedDate`/`date`
+    timestamp on each - "latest" is picked by that timestamp, not by
+    comparing version strings, because some plugins' history mixes
+    versioning schemes across their lifetime (e.g. `python-ce`'s
+    JetBrains-platform-era `261.x` builds alongside a stray
+    old-scheme `2019.2.192.7142.17` release) and a naive string/numeric
+    max over all of them picks the wrong one. There's no IDE build
+    number pinned anywhere in this repo (`configDataDir =
+    "AndroidStudio2026.1.3"` is a marketing version string, not the
+    numeric build JetBrains' stricter compatibility filtering wants),
+    so this intentionally checks "is there a newer published version at
+    all," not "is there a version compatible with this exact IDE
+    build."
+  - Comparison is plain string inequality, not semver-aware - these
+    pins mix real semver (`0.3.0`), JetBrains build-number versions
+    (`261.25134.120-AS`), and prerelease suffixes (`0.1.14-beta`), so
+    "not equal to what's pinned" is the honest thing to report, not
+    "newer than."
+  - Every network call is wrapped in its own `try/except`; failures
+    (timeouts, DNS, 5xx) are silently skipped rather than reported as
+    "outdated" or as errors - only a genuine version mismatch or a
+    confirmed 404/missing-from-index counts as a finding. A run where
+    every single check failed (fully offline) doesn't write the cache
+    at all, so the next invocation retries instead of going quiet for a
+    full day on a coincidental network blip.
+  - Results are cached at `~/.cache/vayori/plugin-update-check.json`
+    with a 24-hour TTL (`VAYORI_PLUGIN_CHECK_TTL`, seconds) - a cache
+    hit reprints the same report with no network calls at all, which is
+    what makes repeated rebuilds in the same day fast.
+    `VAYORI_PLUGIN_CHECK_FORCE=1` bypasses the cache for a manual
+    re-check.
+  - Silent when there's nothing to report (no pins file yet, nothing
+    outdated) - it only ever prints something when there's an actual
+    finding, so it doesn't add noise to every single build.
+- **Wired in via a zsh `preexec` hook in
+  [Terminal.nix](#modulesappsterminalterminalnix)**, not a shell
+  alias/function - `preexec` fires for every command a user actually
+  types before it runs, including ones prefixed with `sudo` (which
+  bypasses a function/alias by doing its own `PATH` lookup). The hook
+  pattern-matches the typed command against
+  `nixos-rebuild`/`home-manager switch`/`nix build`/`nix flake`/`nix
+  run` and, only then, runs `timeout 10s vayori-check-plugin-updates`
+  before letting the real command through - so "run the normal rebuild
+  command" is the only thing anyone has to do, and a hung/absent
+  network can delay a rebuild by at most 10 seconds, never longer.
 
 ---
 
@@ -1018,6 +1125,18 @@ activation time:
   `home.file` — matugen writes `matugenOutputPath` itself at runtime, on
   every wallpaper change, and home-manager would just fight it for
   ownership of that file otherwise.
+- **`androidStudioWithFcc`**: `androidStudioPackages.stable` wrapped
+  (`pkgs.symlinkJoin` + `makeWrapper`) to `--set` the
+  [Free Claude Code](#modulesappsfreeclaudecodefreeclaudecodenix)
+  `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env vars on the real
+  `android-studio` binary specifically, not system-wide. Confirmed by
+  inspecting the built wrapper directly: it exports the vars then
+  `exec -a`s the real (renamed) binary, and the package's own
+  `.desktop` entry references it by bare name (`Exec=android-studio`),
+  so both the app launcher and a direct terminal launch resolve to this
+  wrapped version via `PATH` — no separate desktop-file patching
+  needed. `home.packages` uses this wrapped derivation in place of the
+  raw `androidStudioPackages.stable`.
 
 ## `modules/apps/vscode/Vscode.nix`
 
@@ -1064,6 +1183,23 @@ needed this much dedicated configuration — `DevTools.nix` keeps only
   matched, so matugen's write never actually ran — the theme file just
   held the vsix's own static bundled default the whole time, not a
   live-updated one.
+- **One Dark syntax highlighting, layered on top of the matugen theme,
+  not switched to instead of it**: `workbench.colorTheme` stays
+  `"Dynamic Base16 DankShell"` (the matugen-driven theme above) - the
+  general UI (sidebar, tabs, status bar, ...) keeps following the
+  current wallpaper. `editor.tokenColorCustomizations.textMateRules`
+  and `editor.semanticTokenColorCustomizations` are VS Code's
+  documented mechanism for overriding *just* syntax highlighting on top
+  of whatever theme is active, regardless of which one - so both are
+  set to the real `tokenColors`/`semanticTokenColors` read directly out
+  of the already-packaged `mskelton.one-dark-theme` extension's own
+  `themes/one-dark.json` (not hand-picked or approximated), giving real
+  One Dark syntax colors while the rest of the editor still tracks
+  matugen. The pre-existing italic-comment rule is kept alongside One
+  Dark's own (non-italic) comment color rule for the same scope - VS
+  Code merges multiple rules matching the same scope rather than the
+  later one replacing the earlier one outright, so comments end up both
+  colored and italic, matching original intent plus the added color.
 
 ## `modules/apps/devTools/DevTools.nix`
 
@@ -1281,12 +1417,16 @@ already-installed plugin
   safety net from before the bootstrap split, kept because it's cheap
   insurance against any future slow first start.
 - **`core/Users.nix`'s `home-manager-<name>.service` gets
-  `TimeoutStartSec = lib.mkForce "10min"`** — home-manager's own module
-  defaults this to 5 minutes; bumped as a general safety margin for any
-  slow synchronous activation step (Papirus's icon copy on a slow
-  filesystem, say), not specifically because of FCC anymore now that
-  its own heavy work no longer runs inline - but there's no reason to
-  revert it, either.
+  `TimeoutStartSec = lib.mkForce "30sec"`** — home-manager's own module
+  defaults this to 5 minutes; it was first bumped up to `"10min"` here
+  as a general safety margin for any slow synchronous activation step
+  (Papirus's icon copy on a slow filesystem, say), then tightened back
+  down to `"30sec"`. A live VM test of that `"30sec"` value showed
+  activation getting killed by `Result: timeout` around 24 seconds in,
+  before several steps (including ZenBrowser's) even ran - so on a slow
+  first activation this value can genuinely cut work off short. Worth
+  revisiting if a rebuild ever ends with a `home-manager-<name>.service`
+  timeout in the logs.
 - **`~/.fcc/.env` is seeded once, never overwritten** — confirmed
   against FCC's own source (`config/paths.py`, `managed_env_path()`)
   that this exact path, not the cloned repo's own `.env`, is what the
@@ -1324,26 +1464,36 @@ already-installed plugin
   the IDE itself puts on this same entry when Claude ACP is first
   enabled. Verified this merge behaves correctly both against an empty
   file and one with unrelated pre-existing content, not just assumed.
-- **This targets JetBrains' generic ACP mechanism specifically, not
-  necessarily the already-installed `com.anthropic.code.plugin`
-  itself** (Anthropic's own dedicated JetBrains plugin, pinned in
-  AndroidStudio.nix) — upstream's README only documents the ACP path
-  for JetBrains IDEs, and whether that dedicated plugin reads the same
-  `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env vars (plausible, since
-  it likely wraps the same `claude` CLI under the hood, but not
-  something checkable without decompiling a closed-source plugin jar or
-  live-testing against a real IDE session) is genuinely unverified. If
-  Android Studio's own Claude panel still prompts a login after this,
-  check its own Settings for a custom-endpoint field, or enable Claude
-  through the IDE's built-in AI Assistant/Agent settings first so it
-  registers the `claude-acp` entry this activation script then patches.
+- **The JetBrains ACP registry patch here targets JetBrains' generic ACP
+  mechanism, not necessarily the already-installed
+  `com.anthropic.code.plugin` itself** (Anthropic's own dedicated
+  JetBrains plugin) — upstream's README only documents the ACP path for
+  JetBrains IDEs, and whether that dedicated plugin *also* reads the
+  same `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env vars from ACP's
+  registry is genuinely unverified. Android Studio itself is covered a
+  different, more direct way instead - see below.
+- **`androidStudioWithFcc`** (in
+  [AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)): the
+  real fix for Android Studio specifically. `pkgs.symlinkJoin` +
+  `makeWrapper` wraps the real `android-studio` binary, `--set`-ing the
+  same FCC env vars VS Code's extension gets, scoped to Android Studio's
+  own process tree only - the `.desktop` entry references the binary by
+  bare name (`Exec=android-studio`), so both the app launcher and a
+  direct terminal invocation resolve to the wrapped version via `PATH`,
+  confirmed by inspecting the built wrapper script directly. This is
+  more reliable than the ACP patch above: whatever the Claude Code
+  JetBrains plugin spawns as a subprocess inherits Android Studio's own
+  process environment by plain OS process inheritance, regardless of
+  which specific mechanism the plugin uses internally to read its
+  config - no dependency on ACP being the right registration point at
+  all.
 - **Deliberately not wired system-wide**: `ANTHROPIC_BASE_URL`/
   `ANTHROPIC_AUTH_TOKEN` are set only inside VS Code's own
-  `claudeCode.environmentVariables` and the JetBrains ACP registry —
-  never as a `home.sessionVariables` entry. Doing that would redirect
-  *every* terminal's `claude` invocation through FCC too, silently
-  breaking real authenticated Claude Code CLI usage anywhere else it's
-  used. `fcc-claude` (FCC's own launcher, installed alongside
+  `claudeCode.environmentVariables`, the JetBrains ACP registry, and now
+  Android Studio's own wrapped binary - never as a `home.sessionVariables`
+  entry. Doing that would redirect *every* terminal's `claude` invocation
+  through FCC too, silently breaking real authenticated Claude Code CLI
+  usage anywhere else it's used. `fcc-claude` (FCC's own launcher, installed alongside
   `fcc-server`) is the deliberate opt-in path for terminal use instead
   — it sets these env vars only for itself, leaving the real `claude`
   binary untouched.

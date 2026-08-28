@@ -13,6 +13,7 @@
       self.nixosModules.GrubTheme
       self.nixosModules.DevTooling
       self.nixosModules.VmTesting
+      self.nixosModules.PluginUpdateCheck
 
       ./_hardware.nix
 

@@ -158,6 +158,20 @@
 
       initContent = ''
       # ─────────────────────────────────────────────
+      # Plugin update check
+      # ─────────────────────────────────────────────
+
+      vayori_check_plugin_updates_preexec() {
+        case "$1" in
+          *nixos-rebuild*|*"home-manager switch"*|*"nix build"*|*"nix flake"*|*"nix run"*)
+            timeout 10s vayori-check-plugin-updates
+            ;;
+        esac
+      }
+      autoload -Uz add-zsh-hook
+      add-zsh-hook preexec vayori_check_plugin_updates_preexec
+
+      # ─────────────────────────────────────────────
       # Fastfetch
       # ─────────────────────────────────────────────
 

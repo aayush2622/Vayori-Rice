@@ -1,19 +1,6 @@
-{ self, inputs, ... }: {
-  flake.homeModules.apps.ZenBrowser = { pkgs, lib, vayoriTheme, ... }:
-  let
-  theme = vayoriTheme;
-
-  mkPrefLines = fn: prefs: lib.concatLines (
-    lib.mapAttrsToList (name: value: "${fn}(${builtins.toJSON name}, ${builtins.toJSON value});") prefs
-  );
-
-  zenPrefs = {
-    "extensions.autoDisableScopes" = 0;
-    "extensions.pocket.enabled" = false;
-    "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
-  };
-
-  zenExtensions = [
+{ self, inputs, ... }:
+let
+  zenExtensionsSpec = [
     { name = "uBlock Origin"; slug = "ublock-origin"; guid = "uBlock0@raymondhill.net"; }
     { name = "Bitwarden Password Manager"; slug = "bitwarden-password-manager"; guid = "{446900e4-71c2-419f-a6a7-df9c091e268b}"; }
     { name = "Buster: Captcha Solver for Humans"; slug = "buster-captcha-solver"; guid = "{e58d3966-3d76-4cd9-8552-1582fbc800c1}"; }
@@ -32,6 +19,38 @@
     { name = "Tampermonkey"; slug = "tampermonkey"; guid = "firefox@tampermonkey.net"; }
     { name = "Vimium"; slug = "vimium-ff"; guid = "{d7742d87-e61d-4b78-b8a1-b469842139fa}"; }
   ];
+
+  zenModsSpec = {
+    "Better Tab Indicators" = "664c54f9-d97d-410b-a479-23dd8a08a628";
+    "Cleaned URL bar" = "a5f6a231-e3c8-4ce8-8a8e-3e93efd6adec";
+    "Smaller Compact Mode" = "5941aefd-67b0-453d-9b62-9071a31cbb0d";
+    "No Sidebar Scrollbar" = "4ab93b88-151c-451b-a1b7-a1e0e28fa7f8";
+    "Transparent Zen" = "642854b5-88b4-4c40-b256-e035532109df";
+    "Custom uiFont" = "e74cb40a-f3b8-445a-9826-1b1b6e41b846";
+    "Extensions List" = "181e41d4-dfd3-410d-9a73-561381a2f77d";
+    "Better CtrlTab Panel" = "72f8f48d-86b9-4487-acea-eb4977b18f21";
+  };
+in {
+  flake.pluginPins.ZenBrowser = {
+    extensions = zenExtensionsSpec;
+    mods = zenModsSpec;
+  };
+
+  flake.homeModules.apps.ZenBrowser = { pkgs, lib, vayoriTheme, ... }:
+  let
+  theme = vayoriTheme;
+
+  mkPrefLines = fn: prefs: lib.concatLines (
+    lib.mapAttrsToList (name: value: "${fn}(${builtins.toJSON name}, ${builtins.toJSON value});") prefs
+  );
+
+  zenPrefs = {
+    "extensions.autoDisableScopes" = 0;
+    "extensions.pocket.enabled" = false;
+    "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
+  };
+
+  zenExtensions = zenExtensionsSpec;
 
   guidOf = name: (lib.findFirst (e: e.name == name)
     (throw "zen-browser.nix: no zenExtensions entry named \"${name}\"")
@@ -58,16 +77,7 @@
   zenModsBaseUrl = "${zenModsRoot}/themes";
   zenModsIndexUrl = "${zenModsRoot}/themes.json";
 
-  zenMods = {
-    "Better Tab Indicators" = "664c54f9-d97d-410b-a479-23dd8a08a628";
-    "Cleaned URL bar" = "a5f6a231-e3c8-4ce8-8a8e-3e93efd6adec";
-    "Smaller Compact Mode" = "5941aefd-67b0-453d-9b62-9071a31cbb0d";
-    "No Sidebar Scrollbar" = "4ab93b88-151c-451b-a1b7-a1e0e28fa7f8";
-    "Transparent Zen" = "642854b5-88b4-4c40-b256-e035532109df";
-    "Custom uiFont" = "e74cb40a-f3b8-445a-9826-1b1b6e41b846";
-    "Extensions List" = "181e41d4-dfd3-410d-9a73-561381a2f77d";
-    "Better CtrlTab Panel" = "72f8f48d-86b9-4487-acea-eb4977b18f21";
-  };
+  zenMods = zenModsSpec;
 
   zenSidebarExtensionIds = lib.concatStringsSep "," (
     map guidOf [ "Bitwarden Password Manager" "MAL-Sync" ]
