@@ -1502,3 +1502,40 @@ already-installed plugin
   Aider, each with their own third-party installer script it'd run by
   default. None of that runs here; only `fcc-server`'s own dependencies
   get installed.
+- **The connection info (`baseUrl`, `authToken`, and the full client env
+  var set) is published once as `flake.freeClaudeCode`**, not
+  hardcoded separately in this file, `Vscode.nix`, and
+  `AndroidStudio.nix` — it used to be, three copies of the same
+  `localhost:8082`/`"freecc"` pair. Real bug that shape had: removing
+  `"FreeClaudeCode"` from `vayori.apps` left VS Code's
+  `claudeCode.environmentVariables` and Android Studio's wrapped binary
+  still pointing at a proxy that was never started - no build error,
+  just a Claude Code integration that silently tries to talk to a dead
+  `localhost:8082` instead of falling back to the real Anthropic API.
+  Fixed two ways together: the constants moved to one place
+  (`self.freeClaudeCode`, same public-data pattern as
+  `flake.matugenTemplates`/`flake.pluginPins`), and both consumers now
+  gate the FCC-specific settings behind `builtins.elem "FreeClaudeCode"
+  vayoriApps` - VS Code drops `claudeCode.environmentVariables`/
+  `disableLoginPrompt` entirely (keeping `claudeCode.preferredLocation`,
+  which doesn't depend on FCC) and Android Studio falls back to the
+  plain unwrapped `androidStudioPackages.stable` package. `vayoriApps`
+  is `config.vayori.apps` from the NixOS-level option, threaded into
+  home-manager via `home-manager.extraSpecialArgs` in
+  [core/Users.nix](#modulescoreusersnix) - the same plumbing any other
+  app can use to react to which sibling apps are actually enabled.
+  Verified both ways: built the toplevel/activation packages with FCC
+  enabled (identical output to before), then evaluated again with
+  `"FreeClaudeCode"` and `"ZenBrowser"` stripped from `vayori.apps` and
+  confirmed `claudeCode.environmentVariables` disappears from VS Code's
+  settings and the Android Studio package resolves to the plain
+  `android-studio-*` derivation, not the FCC-wrapped one.
+- **`AndroidStudio.nix`'s `CHROME_EXECUTABLE = "zen"` has the same
+  fix, same reason**: it only gets set when `"ZenBrowser"` is actually
+  in `vayori.apps` (`lib.optionalAttrs`), since it names a binary that
+  doesn't exist otherwise. A repo-wide scan for this pattern (any app
+  module hardcoding another app's binary name, URL, or port) turned up
+  exactly these two couplings - Zen's own `zenExtensions` list has a
+  "Bitwarden Password Manager" entry too, but that's a *browser
+  add-on* pinned inside `ZenBrowser.nix` itself, unrelated to the
+  separate standalone `Bitwarden.nix` app; not a real coupling.

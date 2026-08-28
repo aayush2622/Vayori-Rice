@@ -22,7 +22,7 @@ let
 in {
   flake.pluginPins.AndroidStudio = androidStudioPluginsSpec;
 
-  flake.homeModules.apps.AndroidStudio = { pkgs, lib, config, vayoriTheme, ... }:
+  flake.homeModules.apps.AndroidStudio = { pkgs, lib, config, vayoriTheme, vayoriApps, ... }:
   let
     configDataDir = "AndroidStudio2026.1.3";
     pluginsDir = ".local/share/Google/${configDataDir}";
@@ -117,25 +117,19 @@ in {
       "${matugenDirRel}/templates/android-studio-colors.icls" = { text = matugenIclsTemplate; };
     };
 
-    androidStudioFccEnv = {
-      ANTHROPIC_BASE_URL = "http://localhost:8082";
-      ANTHROPIC_AUTH_TOKEN = "freecc";
-      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
-      CLAUDE_CODE_AUTO_COMPACT_WINDOW = "190000";
-      DISABLE_AUTOUPDATER = "1";
-      DISABLE_FEEDBACK_COMMAND = "1";
-      DISABLE_ERROR_REPORTING = "1";
-    };
-
-    androidStudioWithFcc = pkgs.symlinkJoin {
-      name = "android-studio-with-fcc";
-      paths = [ pkgs.androidStudioPackages.stable ];
-      buildInputs = [ pkgs.makeWrapper ];
-      postBuild = ''
-        wrapProgram $out/bin/android-studio \
-          ${lib.concatStringsSep " " (lib.mapAttrsToList (n: v: "--set ${n} ${lib.escapeShellArg v}") androidStudioFccEnv)}
-      '';
-    };
+    androidStudioWithFcc =
+      if builtins.elem "FreeClaudeCode" vayoriApps then
+        pkgs.symlinkJoin {
+          name = "android-studio-with-fcc";
+          paths = [ pkgs.androidStudioPackages.stable ];
+          buildInputs = [ pkgs.makeWrapper ];
+          postBuild = ''
+            wrapProgram $out/bin/android-studio \
+              ${lib.concatStringsSep " " (lib.mapAttrsToList (n: v: "--set ${n} ${lib.escapeShellArg v}") self.freeClaudeCode.clientEnv)}
+          '';
+        }
+      else
+        pkgs.androidStudioPackages.stable;
   in {
     home.packages = with pkgs; [
       androidStudioWithFcc
@@ -146,6 +140,7 @@ in {
     home.sessionVariables = {
       ANDROID_SDK_ROOT = "$HOME/Android/Sdk";
       ANDROID_HOME = "$HOME/Android/Sdk";
+    } // lib.optionalAttrs (builtins.elem "ZenBrowser" vayoriApps) {
       CHROME_EXECUTABLE = "zen";
     };
 

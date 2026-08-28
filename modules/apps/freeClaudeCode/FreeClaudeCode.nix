@@ -1,5 +1,34 @@
-{ self, inputs, ... }: {
-  flake.homeModules.apps.FreeClaudeCode =
+{ self, inputs, lib, ... }:
+let
+  freeClaudeCodeSpec = {
+    baseUrl = "http://localhost:8082";
+    authToken = "freecc";
+    clientEnv = {
+      ANTHROPIC_BASE_URL = "http://localhost:8082";
+      ANTHROPIC_AUTH_TOKEN = "freecc";
+      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW = "190000";
+      DISABLE_AUTOUPDATER = "1";
+      DISABLE_FEEDBACK_COMMAND = "1";
+      DISABLE_ERROR_REPORTING = "1";
+    };
+  };
+in {
+  options.flake.freeClaudeCode = lib.mkOption {
+    type = lib.types.lazyAttrsOf lib.types.unspecified;
+    default = { };
+    description = ''
+      Free Claude Code's proxy connection info (base URL, auth token, the
+      client env vars that point a Claude Code integration at it), shared
+      so apps that optionally wire into it (VS Code, Android Studio)
+      don't each hardcode their own copy - see
+      modules/apps/freeClaudeCode/FreeClaudeCode.nix.
+    '';
+  };
+
+  config.flake.freeClaudeCode = freeClaudeCodeSpec;
+
+  config.flake.homeModules.apps.FreeClaudeCode =
     {
       pkgs,
       lib,
@@ -15,7 +44,7 @@
       fccSeedEnv = {
         MODEL = "nvidia_nim/nvidia/nemotron-3-super-120b-a12b";
         PROXY_AUTH_ENABLED = "false";
-        ANTHROPIC_AUTH_TOKEN = "freecc";
+        ANTHROPIC_AUTH_TOKEN = self.freeClaudeCode.authToken;
         FCC_OPEN_BROWSER = "false";
       };
 
@@ -29,15 +58,7 @@
         )
         + "\n"
       );
-      claudeAcpEnv = {
-        ANTHROPIC_BASE_URL = "http://localhost:8082";
-        ANTHROPIC_AUTH_TOKEN = "freecc";
-        CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
-        CLAUDE_CODE_AUTO_COMPACT_WINDOW = "190000";
-        DISABLE_AUTOUPDATER = "1";
-        DISABLE_FEEDBACK_COMMAND = "1";
-        DISABLE_ERROR_REPORTING = "1";
-      };
+      claudeAcpEnv = self.freeClaudeCode.clientEnv;
 
       fccBootstrapScript = pkgs.writeShellScript "free-claude-code-bootstrap" ''
         set -e
