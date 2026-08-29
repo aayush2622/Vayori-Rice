@@ -92,9 +92,9 @@
                   "FreeClaudeCode"
 
                   "Cpp"
-                  "Rust"
+                  #"Rust"
                   "Kotlin"
-                  "Flutter"
+                  #"Flutter"
                   "Nix"
                   "Qt"
                   "Python"
@@ -107,6 +107,7 @@
                   "Vesktop"
                   "Spicetify"
                   "Bitwarden"
+                  "StateBackup"
                 ];
               };
             in

@@ -190,5 +190,11 @@ in {
         run chmod -R u+w "$extDir"
       fi
     '';
+
+    home.activation.vscodeWakatimeConfig = lib.hm.dag.entryAfter [ "writeBoundary" "seedVayoriSecrets" ] ''
+      SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
+      WAKATIME_KEY="$(grep -m1 '^WAKATIME_API_KEY=' "$SECRETS_FILE" 2>/dev/null | cut -d= -f2- || true)"
+      run ${pkgs.crudini}/bin/crudini --set "$HOME/.wakatime.cfg" settings api_key "$WAKATIME_KEY"
+    '';
   };
 }

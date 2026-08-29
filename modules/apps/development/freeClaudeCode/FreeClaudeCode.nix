@@ -49,14 +49,7 @@ in {
       };
 
       fccSeedEnvFile = pkgs.writeText "fcc-seed.env" (
-        lib.concatStringsSep "\n" (
-          (lib.mapAttrsToList (n: v: "${n}=${v}") fccSeedEnv)
-          ++ [
-            "# Create a free key at https://build.nvidia.com/settings/api-keys"
-            "# NVIDIA_NIM_API_KEY="
-          ]
-        )
-        + "\n"
+        lib.concatStringsSep "\n" (lib.mapAttrsToList (n: v: "${n}=${v}") fccSeedEnv) + "\n"
       );
       claudeAcpEnv = self.freeClaudeCode.clientEnv;
 
@@ -80,13 +73,16 @@ in {
         pkgs.python314
       ];
 
-      home.activation.freeClaudeCodeSetup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      home.activation.freeClaudeCodeSetup = lib.hm.dag.entryAfter [ "writeBoundary" "seedVayoriSecrets" ] ''
         FCC_CONFIG_DIR=${lib.escapeShellArg fccConfigDir}
 
         run mkdir -p "$FCC_CONFIG_DIR"
 
         if [ ! -f "$FCC_CONFIG_DIR/.env" ]; then
-          run cp ${fccSeedEnvFile} "$FCC_CONFIG_DIR/.env"
+          run sh -c "cat ${fccSeedEnvFile} > '$FCC_CONFIG_DIR/.env'"
+          SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
+          NVIDIA_KEY="$(grep -m1 '^NVIDIA_NIM_API_KEY=' "$SECRETS_FILE" 2>/dev/null | cut -d= -f2- || true)"
+          run sh -c "printf 'NVIDIA_NIM_API_KEY=%s\n' \"\$1\" >> '$FCC_CONFIG_DIR/.env'" -- "$NVIDIA_KEY"
         fi
 
         CLAUDE_JSON=${lib.escapeShellArg claudeJsonFile}

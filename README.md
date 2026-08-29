@@ -35,6 +35,7 @@ folder and it works - see [Extending it](#extending-it).
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Quick start](#quick-start-on-the-reference-machines-exact-hardware)
+- [Secrets](#secrets)
 - [Using this on your own machine](#using-this-on-your-own-machine)
 - [Layout](#layout)
 - [Extending it](#extending-it)
@@ -112,6 +113,47 @@ sudo nixos-rebuild switch --flake .#Diablo
 > [!NOTE]
 > Any user without a `hashedPassword` set logs in with `changeme` the first
 > time. Run `passwd` right after and forget I told you that.
+
+---
+
+## Secrets
+
+A handful of small credentials (an NVIDIA NIM API key for Free Claude
+Code, a WakaTime key for Zed/VS Code/Android Studio, a Bitwarden CLI
+email) live in one plain text file:
+`~/.config/vayori/session/secrets.env`. It gets seeded with placeholder
+values on first rebuild - just open it and fill in the real ones:
+
+```bash
+$EDITOR ~/.config/vayori/session/secrets.env
+```
+
+No encryption layer, no keypair to generate or lose. These aren't
+high-stakes secrets (a self-hosted proxy token, a time-tracking key, an
+email address), and the file already lives somewhere that's never
+committed to git and has its own backup story - see below - so a whole
+extra layer for them wasn't buying much.
+
+Actual login sessions (Zen Browser, Vesktop, VS Code/Zed accounts, rbw,
+Bitwarden desktop, Free Claude Code's `.env`) - and that same
+`secrets.env` - all get symlinked into one fixed folder,
+`~/.config/vayori/session`, automatically on every rebuild, regardless
+of where this repo happens to be checked out. So that one folder is the
+only thing that ever needs to move for a fresh install to come back
+already logged into everything. Copy it directly (`cp -r`) for a
+same-trust move, or use a password-encrypted archive for anywhere less
+trusted:
+
+```bash
+vayori-app-state backup ~/vayori-session.enc    # on the old machine
+vayori-app-state restore ~/vayori-session.enc   # on the new one
+```
+
+Full mechanism is in
+[docs/core.md](docs/core.md#modulescoreusersnix) (what's in
+`secrets.env` and how each app reads it) and
+[docs/apps-utils.md](docs/apps-utils.md#modulesappsutilsstatebackupstatebackupnix)
+(the session folder + CLI).
 
 ---
 

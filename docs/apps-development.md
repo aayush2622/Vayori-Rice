@@ -74,6 +74,16 @@ machine, pinned as real Nix packages instead of fetched live every time:
   it by that same bare name - so both the app launcher and a plain
   terminal launch resolve to the wrapped version automatically, no
   desktop-file patching needed.
+- **The WakaTime plugin's key comes from `~/.wakatime.cfg`**, not a
+  plugin-specific settings file - that's the one file WakaTime's own
+  plugins for virtually every editor read from, JetBrains included, so
+  it's the correct place regardless of what this repo does elsewhere.
+  An activation script sets just the `api_key` line via `crudini`
+  (reads `WAKATIME_API_KEY` from
+  `~/.config/vayori/session/secrets.env`), leaving any other settings
+  already in that file - proxy config, excluded projects - untouched.
+  VS Code's own WakaTime extension reads the exact same file, so both
+  editors end up correctly configured from one shared mechanism.
 
 ---
 
@@ -123,6 +133,12 @@ grew enough config to earn its own module.
   way in a real VM: the capitalized version just silently never matched,
   so the theme file sat there holding its static bundled default
   forever, never actually updating.
+- **The WakaTime extension's key is set via `~/.wakatime.cfg`**, the same
+  shared file (and same `crudini`-based mechanism) Android Studio's
+  WakaTime plugin uses - see
+  [AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)
+  above. Nothing extension-specific to configure here; WakaTime's own
+  plugins across editors all read that one file by convention.
 - **One Dark syntax highlighting sits on top of the matugen theme,
   rather than replacing it.** The overall UI theme stays matugen-driven,
   tracking the current wallpaper; a separate, VS Code-documented
@@ -155,12 +171,15 @@ specific settings of its own to begin with.
   declared settings still win every rebuild, but the file stays normal
   and editable in between, the way Zed itself expects to be able to
   write to it from its own UI.
-- **The real config's WakaTime API key is deliberately not in this
-  file.** It was a live, real key in the source config, and this repo is
-  public - shipping it would mean leaking a real credential. Left out
-  entirely rather than redacted-in-place; set it locally through Zed's
-  own settings, or wire it through a real secrets manager if it needs to
-  be declarative.
+- **The WakaTime API key isn't declared in this file's own settings** -
+  it's a real credential, and even outside a public repo, a plain Nix
+  value here would end up baked into the world-readable `/nix/store`
+  forever. It's spliced in separately, after Zed's own settings merge
+  has run, by a small `jq` patch reading `WAKATIME_API_KEY` straight out
+  of `~/.config/vayori/session/secrets.env` - see
+  [core/Users.nix](core.md#modulescoreusersnix) for that file's
+  mechanism, which Free Claude Code's API key and VS Code/Android
+  Studio's own WakaTime setup all go through too.
 - Fonts here track the one shared theme font setting, not a hardcoded
   copy of whatever the real config happened to say - same reasoning as
   every other themed app in this repo.
@@ -299,10 +318,14 @@ and Android Studio's plugin.
   declaring it the way some other config files in this repo are managed
   would fight that admin UI for ownership and wipe out a pasted-in key
   on every rebuild - so it's only written if it doesn't exist yet, same
-  pattern as the Papirus icon copy elsewhere. The seed leaves the actual
-  provider API key commented out, since generating one isn't something
-  this repo can do for you - grab a free one from NVIDIA and paste it
-  in, or set it through FCC's own admin UI instead.
+  pattern as the Papirus icon copy elsewhere. The provider API key line
+  gets filled in from `NVIDIA_NIM_API_KEY` in
+  `~/.config/vayori/session/secrets.env` at seed time (see
+  [core/Users.nix](core.md#modulescoreusersnix)) rather than left
+  commented out for a manual paste - generating the key itself still
+  isn't something this repo can do for you, grab a free one from NVIDIA
+  and drop it into that file, or set it through FCC's own admin UI
+  instead.
 - **Claude Code's own state file gets one specific flag merged in** -
   documented upstream as the fix for Claude Code still prompting a real
   Anthropic login even with FCC's URL/token already set. Merged in with

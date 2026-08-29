@@ -14,6 +14,8 @@
 
       spicetifyPackage = pkgs.spicetify-cli;
 
+      wayland = true;
+
       theme = spicePkgs.themes.hazy // {
         extraPkgs = [ vayoriTheme.fontPackage ];
         additionalCss = ''

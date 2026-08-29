@@ -184,6 +184,56 @@ entry can contain.
   profile fetch, currently) needs it, and without this it can race the
   network interface coming up during boot.
 
+**Also where the secrets file gets seeded**, one activation script for
+every user (`seedVayoriSecrets`): if `~/.config/vayori/session/secrets.env`
+doesn't exist yet, it writes one with placeholder values and stops -
+never touches it again after that, so anything you fill in survives
+every future rebuild untouched.
+
+- **Plain text, on purpose.** `secrets.env` holds small values individual
+  apps need - `NVIDIA_NIM_API_KEY` (Free Claude Code's model provider
+  key), `WAKATIME_API_KEY` (Zed/VS Code/Android Studio's WakaTime
+  plugins), `RBW_EMAIL` (the Bitwarden CLI vault's account email) - as
+  plain `KEY=value` lines, no encryption layer, no separate keypair to
+  manage or lose. This repo used to run these through
+  [sops-nix](https://github.com/Mic92/sops-nix) (age-encrypted at rest,
+  decrypted at activation time); that added a whole extra
+  moving part - a keypair to generate, back up, and copy to every new
+  machine before anything else would work - for values that aren't
+  actually that sensitive (a self-hosted proxy key, a time-tracking
+  token, an email address) and already live inside a folder
+  ([session/](apps-utils.md#modulesappsutilsstatebackupstatebackupnix))
+  that isn't committed to git and has its own password-encrypted
+  backup/restore path already. Fewer moving parts, same practical
+  protection for what's actually at stake here.
+- **Edit it directly, any time**: `$EDITOR
+  ~/.config/vayori/session/secrets.env`. No CLI, no re-encrypt step, no
+  key to have on hand first - just a text file.
+- **Consumers read the value at *activation* time, never at build
+  time.** Each app that needs one does a `grep '^KEY=' secrets.env` in
+  its own `home.activation` script and applies it however that app
+  natively expects (JSON merge for Zed/rbw, a `.wakatime.cfg` edit via
+  `crudini` for VS Code/Android Studio, an appended `.env` line for
+  Free Claude Code) - never baked into a Nix string, since that would
+  put the value in the world-readable `/nix/store` forever. Each of
+  those scripts orders itself `entryAfter [ "writeBoundary"
+  "seedVayoriSecrets" ]`, the same cross-module dag-ordering trick this
+  repo already relied on for sops-nix - a node from a different,
+  always-present module, referenced by name.
+- **Missing a value isn't a hard failure.** No key file, no assertion,
+  nothing to set up before the rest of the build works - a blank or
+  placeholder value just means that one integration (WakaTime tracking,
+  Free Claude Code's model access, rbw's email) doesn't do anything
+  useful yet, exactly like before you'd filled in the real value. Fill
+  it in and rebuild whenever you're ready.
+- **Survives reinstalls the same way everything else in `session/`
+  does** - it's not one of the app paths
+  [StateBackup.nix](apps-utils.md#modulesappsutilsstatebackupstatebackupnix)
+  symlinks in from elsewhere (there's no pre-existing app default to
+  migrate from), it's just a plain file written directly inside
+  `session/` from the start - so a `cp -r`, or `vayori-app-state
+  backup`/`restore`, carries it along with everything else automatically.
+
 ---
 
 ## `modules/core/DevLanguages.nix`

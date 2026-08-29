@@ -76,7 +76,7 @@
       home-manager.extraSpecialArgs = { inherit inputs self; vayoriTheme = config.vayori.theme; vayoriApps = config.vayori.apps; };
       home-manager.backupFileExtension = "backup";
 
-      home-manager.users = lib.mapAttrs (name: u: { ... }: {
+      home-manager.users = lib.mapAttrs (name: u: { lib, ... }: {
         imports = [
           self.homeModules.Baseline
         ] ++ (map (app: self.homeModules.apps.${app}) config.vayori.apps);
@@ -86,6 +86,15 @@
         home.file = lib.mkIf (u.avatar != null) {
           ".face".source = u.avatar;
         };
+
+        home.activation.seedVayoriSecrets = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
+          if [ ! -f "$SECRETS_FILE" ]; then
+            run mkdir -p "$(dirname "$SECRETS_FILE")"
+            run sh -c "printf 'NVIDIA_NIM_API_KEY=REPLACE_ME\nWAKATIME_API_KEY=REPLACE_ME\nRBW_EMAIL=REPLACE_ME\n' > '$SECRETS_FILE'"
+            run chmod 600 "$SECRETS_FILE"
+          fi
+        '';
       }) cfg;
 
       systemd.services = lib.mapAttrs' (name: u: lib.nameValuePair "home-manager-${name}" {
