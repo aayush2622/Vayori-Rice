@@ -58,21 +58,32 @@ file in the right folder" - see [Extending it](#extending-it).
 - Terminal setup: kitty + zsh (oh-my-zsh, autosuggestions, syntax
   highlighting) + fastfetch with a randomized ASCII/image logo per shell
   start.
-- Opt-in apps per machine: Nautilus, Zen Browser (locked-down,
-  privacy-leaning profile), Spicetify (custom font via CSS injection),
-  Bitwarden, a dev-tools bundle (git, gh, lazygit, docker-compose), VS
-  Code, Android Studio, and Vesktop - all with the real settings/
-  plugins/extensions from the reference machine pinned as Nix
+- Opt-in apps per machine, organized under `modules/apps/` into
+  `development/`, `gaming/`, and `utils/`: Nautilus, Zen Browser
+  (locked-down, privacy-leaning profile), Spicetify (custom font via CSS
+  injection), Bitwarden, a dev-tools bundle (git, gh, lazygit,
+  docker-compose), three editors (VS Code, Android Studio, Zed - Zed
+  gets its own matugen-driven theme too, hand-authored against Zed's
+  published theme schema), and Vesktop - all with the real
+  settings/plugins/extensions from the reference machine pinned as Nix
   derivations, not a live importer - and a full gaming setup (Steam,
   Lutris + Heroic, GE-Proton via umu-launcher, gamescope presets,
   restyled MangoHud - Steam, Heroic, Vesktop, and even Wine's own
   dialogs pick up the current matugen palette too).
+- Per-language dev setup under `modules/apps/development/languages/`
+  (C/C++, Rust, Kotlin, Dart+Flutter, Nix, Qt, Python): each toggle installs
+  that language's own LSP/toolchain and, in the same step, gates which
+  of VS Code's, Android Studio's, and Zed's language-specific
+  extensions/plugins actually get installed - drop a language from
+  `vayori.apps` and its extensions disappear from every editor with it,
+  no per-editor cleanup needed. See
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md#modulescoredevlanguagesnix).
 - [Free Claude Code](https://github.com/Alishahryar1/free-claude-code)
   runs as a background service, routing Claude Code's CLI, its VS Code
   extension, and Android Studio's JetBrains ACP integration through
   free-tier model providers (NVIDIA NIM by default) instead of
   Anthropic's paid API - needs a one-time free API key, see
-  [docs/CONFIGURATION.md](docs/CONFIGURATION.md#modulesappsfreeclaudecodefreeclaudecodenix).
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md#modulesappsdevelopmentfreeclaudecodefreeclaudecodenix).
 - ASUS ROG-specific: a DankBar widget
   ([DankAsusControl](https://github.com/shazzaam7/DankAsusControl)) for
   switching power profiles and GPU mode (Integrated/Hybrid/Dedicated)
@@ -140,7 +151,14 @@ equivalent). Nothing in `modules/desktop/`, `modules/system/`, or
      takes `fullName`/`hashedPassword`/`extraGroups`/`shell`/`avatar`/
      `extraPackages` (see `modules/core/Users.nix` for what each does;
      generate a password hash with `mkpasswd -m sha-512`).
-   - Adjust `vayori.apps` - a plain list of names from `modules/apps/*/*.nix`.
+   - Adjust `vayori.apps` - the option itself is a plain list of names
+     from `modules/apps/{development,gaming,utils}/**/*.nix` (language
+     toggles under `development/languages/` included). `Host.nix` writes
+     it as `{ development = [...]; gaming = [...]; utils = [...]; }`
+     grouped by category, then flattens that with `lib.flatten
+     (lib.attrValues ...)` before assigning - purely a readability
+     convenience at the call site, not a type the option itself knows
+     about, so a plain flat list works exactly as well.
    - Adjust timezone/locale/bootloader/packages further down as needed.
 
 4. **Rebuild**:
@@ -172,6 +190,15 @@ modules/
   system/                     system-level infra unrelated to the desktop
     DevTooling.nix (docker/libvirtd/adbusers) / GrubTheme.nix
   apps/                       opt-in per-user (home-manager) modules, picked via vayori.apps - one folder each
+    development/                editors, dev-tools, FreeClaudeCode
+      editors/                     Vscode, AndroidStudio, Zed - one folder each
+      languages/                   one folder per language (Cpp/Rust/Kotlin/Flutter[+Dart]/Nix/Qt/Python) -
+                                    installs that language's LSP/toolchain and publishes
+                                    self.devLanguages.<Lang>, which editors read to decide which of
+                                    their own extensions/plugins to install (see core/DevLanguages.nix)
+    gaming/                      Gaming.nix (aggregator) + _launchers/_proton/_performance.nix
+                                    (underscore = plain fragments, not their own flake-parts modules)
+    utils/                       everything else opt-in: Terminal, Nautilus, ZenBrowser, Vesktop, ...
   assets/
     wallpapers/                 default wallpaper set (session.json seeded to point here, see desktop/Dms.nix)
 ```
@@ -185,11 +212,20 @@ modules/
 else to wire up. Apps are picked once per *machine* (`vayori.apps`, same
 file), not per person - everyone on a host gets the same app set.
 
-**Add an app**: drop a folder in `modules/apps/` (e.g.
-`modules/apps/foo/Foo.nix`) that sets `flake.homeModules.apps.<Name>`.
+**Add an app**: drop a folder under `modules/apps/development/`,
+`modules/apps/gaming/`, or `modules/apps/utils/` (e.g.
+`modules/apps/utils/foo/Foo.nix`) that sets `flake.homeModules.apps.<Name>`.
 It's automatically a valid entry for `vayori.apps` - nothing else to wire
 up (see `modules/core/Users.nix`,
-`availableApps = builtins.attrNames self.homeModules.apps`).
+`availableApps = builtins.attrNames self.homeModules.apps`). The category
+folder is purely organizational - only the `flake.homeModules.apps.<Name>`
+key matters, so it can live anywhere under `modules/apps/`.
+
+**Add a language**: drop a folder in `modules/apps/development/languages/`
+that sets `flake.homeModules.apps.<Lang>` (its packages: LSP + toolchain)
+and `flake.devLanguages.<Lang>` (which extensions/plugins editors should
+install for it - see `modules/core/DevLanguages.nix` for the shape editors
+expect). Add `<Lang>` to `vayori.apps` and every editor picks it up.
 
 **Add a host**: copy `modules/hosts/Diablo/` to `modules/hosts/<name>/`
 and edit its two files. Full walkthrough:

@@ -240,15 +240,10 @@
     };
   in
   {
-    home.packages = [ pkgs.vesktop ];
-
-    home.file.".config/vesktop/settings.json" = {
-      text = builtins.toJSON vesktopSettings;
-      force = true;
-    };
-    home.file.".config/vesktop/settings/settings.json" = {
-      text = builtins.toJSON (vencordSettings // { plugins = vencordPlugins; });
-      force = true;
+    programs.vesktop = {
+      enable = true;
+      settings = vesktopSettings;
+      vencord.settings = vencordSettings // { plugins = vencordPlugins; };
     };
 
     home.file.".config/matugen/templates/vesktop-colors.css".text = self.matugenTemplates.vesktop;

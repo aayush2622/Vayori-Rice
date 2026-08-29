@@ -107,10 +107,8 @@
           iconsDir="$HOME/${papirusIconsDir}"
           stampFile="$iconsDir/.vayori-source-path"
           if [ ! -f "$stampFile" ] || [ "$(cat "$stampFile")" != "${theme.iconPackage}" ]; then
-            run rm -rf "$iconsDir"
             run mkdir -p "$iconsDir"
-            run cp -rL "${theme.iconPackage}/share/icons/Papirus/." "$iconsDir/"
-            run chmod -R u+w "$iconsDir"
+            run ${pkgs.rsync}/bin/rsync -aL --delete --chmod=u+w "${theme.iconPackage}/share/icons/Papirus/." "$iconsDir/"
             echo -n "${theme.iconPackage}" > "$stampFile"
           fi
         '';

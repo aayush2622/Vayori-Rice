@@ -81,22 +81,49 @@
             };
           };
 
-          vayori.apps = [
-            "Terminal"
-            "Nautilus"
-            "ZenBrowser"
-            "Vesktop"
-            "AndroidStudio"
-            "Spicetify"
-            "DevTools"
-            "Gaming"
-            "Bitwarden"
-            "Vscode"
-            "FreeClaudeCode"
-          ];
+          # Grouped by category purely for readability - config.vayori.apps
+          # itself (the option every consumer actually reads) stays a flat
+          # list, flattened right here, so nothing downstream (core/Users.nix,
+          # core/PluginUpdateCheck.nix, every app's `vayoriApps` argument)
+          # needs to know these groups exist.
+          vayori.apps =
+            let
+              appsByCategory = {
+                development = [
+                  "Vscode"
+                  "AndroidStudio"
+                  "Zed"
+                  "DevTools"
+                  "FreeClaudeCode"
+
+                  # Language apps - each installs its own LSP/toolchain and,
+                  # in turn, gates which of the editors' language-specific
+                  # extensions/plugins actually get installed. See
+                  # modules/core/DevLanguages.nix.
+                  "Cpp"
+                  "Rust"
+                  "Kotlin"
+                  "Flutter" # Dart + Flutter, one toggle - see Flutter.nix
+                  "Nix"
+                  "Qt"
+                  "Python"
+                ];
+                gaming = [ "Gaming" ];
+                utils = [
+                  "Terminal"
+                  "Nautilus"
+                  "ZenBrowser"
+                  "Vesktop"
+                  "Spicetify"
+                  "Bitwarden"
+                ];
+              };
+            in
+            lib.flatten (lib.attrValues appsByCategory);
 
           nix.settings.experimental-features = [ "nix-command" "flakes" ];
           nixpkgs.config.allowUnfree = true;
+          nixpkgs.overlays = [ inputs.nix-vscode-extensions.overlays.default ];
 
           nix.settings.auto-optimise-store = true;
           nix.gc = {

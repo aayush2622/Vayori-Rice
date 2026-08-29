@@ -16,6 +16,7 @@ reference, not the walkthrough.
 
 **Core & hosts**
 - [core/Users.nix](#modulescoreusersnix)
+- [core/DevLanguages.nix](#modulescoredevlanguagesnix)
 - [core/PluginUpdateCheck.nix](#modulescorepluginupdatechecknix)
 - [hosts/\<name\>/Host.nix](#moduleshostsnamehostnix)
 - [hosts/\<name\>/\_hardware.nix](#moduleshostsname_hardwarenix)
@@ -32,18 +33,24 @@ reference, not the walkthrough.
 - [system/DevTooling.nix](#modulessystemdev-toolingnix)
 - [system/GrubTheme.nix](#modulessystemgrub-themenix)
 
-**Apps**
-- [apps/zenBrowser/ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix)
-- [apps/spicetify/Spicetify.nix](#modulesappsspicetifyspicetifynix)
+**Apps - development**
+- [apps/development/editors/vscode/Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix)
+- [apps/development/editors/androidStudio/AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)
+- [apps/development/editors/zed/Zed.nix](#modulesappsdevelopmenteditorszedzednix)
+- [apps/development/devTools/DevTools.nix](#modulesappsdevelopmentdevtoolsdevtoolsnix)
+- [apps/development/freeClaudeCode/FreeClaudeCode.nix](#modulesappsdevelopmentfreeclaudecodefreeclaudecodenix)
+- [apps/development/languages/\*/\*.nix](#modulesappsdevelopmentlanguagesnix) (Cpp, Rust, Kotlin, Flutter [+Dart], Nix, Qt)
+
+**Apps - gaming**
 - [apps/gaming/Gaming.nix](#modulesappsgaminggamingnix)
-- [apps/nautilus/Nautilus.nix](#modulesappsnautilusnautilusnix)
-- [apps/androidStudio/AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)
-- [apps/vscode/Vscode.nix](#modulesappsvscodevscodenix)
-- [apps/devTools/DevTools.nix](#modulesappsdevtoolsdevtoolsnix)
-- [apps/bitwarden/Bitwarden.nix](#modulesappsbitwardenbitwardennix)
-- [apps/terminal/Terminal.nix](#modulesappsterminalterminalnix)
-- [apps/vesktop/Vesktop.nix](#modulesappsvesktopvesktopnix)
-- [apps/freeClaudeCode/FreeClaudeCode.nix](#modulesappsfreeclaudecodefreeclaudecodenix)
+
+**Apps - utils**
+- [apps/utils/zenBrowser/ZenBrowser.nix](#modulesappsutilszenbrowserzenbrowsernix)
+- [apps/utils/spicetify/Spicetify.nix](#modulesappsutilsspicetifyspicetifynix)
+- [apps/utils/nautilus/Nautilus.nix](#modulesappsutilsnautilusnautilusnix)
+- [apps/utils/bitwarden/Bitwarden.nix](#modulesappsutilsbitwardenbitwardennix)
+- [apps/utils/terminal/Terminal.nix](#modulesappsutilsterminalterminalnix)
+- [apps/utils/vesktop/Vesktop.nix](#modulesappsutilsvesktopvesktopnix)
 
 ---
 
@@ -66,7 +73,8 @@ Two option namespaces get populated across these files:
 | Namespace | Set by | Read by |
 | --- | --- | --- |
 | `flake.nixosModules.*` | `hosts/`, `desktop/`, `system/`, `core/Users.nix` | `Host.nix`'s `modules` list |
-| `flake.homeModules.apps.*` | `modules/apps/*/*.nix` | `core/Users.nix`, via `vayori.apps` |
+| `flake.homeModules.apps.*` | `modules/apps/**/*.nix` (any depth) | `core/Users.nix`, via `vayori.apps` |
+| `flake.devLanguages.*` | `modules/apps/development/languages/*/*.nix` | `Vscode.nix`/`AndroidStudio.nix`, filtered by `vayori.apps` |
 
 All of the above is attribute-name-based, not path-based — `Host.nix`
 imports `self.nixosModules.dms`, never a file path. Moving a file to a
@@ -97,11 +105,36 @@ you're running (Docker, GRUB theming). The line between `desktop` and
 doesn't, so it's `system`, not `desktop`, even though it's still
 "theming."
 
-`apps/` is deliberately flat by *category* (every app is a peer under
-`apps/`) but consistent by *shape* — every app is a folder
-(`apps/<name>/<name>.nix`) whether or not it currently has extra assets
-alongside it, so adding a font file or script to an app later never means
-restructuring it from a flat file into a folder.
+`apps/` is split into three categories — `development/`, `gaming/`,
+`utils/` — and every app is a folder (`apps/<category>/<name>/<name>.nix`)
+whether or not it currently has extra assets alongside it, so adding a
+font file or script to an app later never means restructuring it from a
+flat file into a folder. The category is purely organizational: only the
+`flake.homeModules.apps.<Name>` attribute name matters to the rest of the
+repo (`vayori.apps`, `core/Users.nix`'s `availableApps`), so an app can
+move between categories, or nest arbitrarily deep, without touching
+anything outside its own folder.
+
+`apps/development/editors/` holds the three editors (`Vscode`,
+`AndroidStudio`, `Zed`), each a normal app plus a *consumer* of
+`flake.devLanguages` (see below) — grouped in their own folder mainly so
+"which apps are editors that read language data" is visible from the
+directory listing alone, not something you'd otherwise have to grep for.
+
+`apps/development/languages/` is its own thing within `development/`: one
+folder per language (`Cpp`, `Rust`, `Kotlin`, `Flutter` — covers Dart too,
+one toggle for both, see that section — `Nix`, `Qt`), each both a normal
+app (`flake.homeModules.apps.<Lang>` installs that language's
+LSP/toolchain) *and* a data source (`flake.devLanguages.<Lang>`) that
+every editor above reads to decide which of its own extensions/plugins to
+install — see [core/DevLanguages.nix](#modulescoredevlanguagesnix).
+
+`apps/gaming/` is one app (`Gaming`) split across multiple files for
+readability: `Gaming.nix` is the actual `flake.homeModules.apps.Gaming`
+entry, and `_launchers.nix`/`_proton.nix`/`_performance.nix` are plain
+home-manager module fragments it `imports` by relative path — the leading
+underscore keeps them out of import-tree's own auto-import (same trick as
+`_hardware.nix`), since they aren't flake-parts modules on their own.
 
 ---
 
@@ -171,7 +204,14 @@ planes, so a screenshot not showing a cursor isn't proof it's still broken
 on real output.
 
 **Apps** (`vayori.apps`): pick from file names under `modules/apps/` — the
-one setting most new machines actually need to change.
+one setting most new machines actually need to change. Written here as
+`{ development = [...]; gaming = [...]; utils = [...]; }`, flattened with
+`lib.flatten (lib.attrValues appsByCategory)` before being assigned - the
+option itself (`core/Users.nix`) only ever sees the flat list this
+produces, so the grouping is a call-site convenience, not part of the
+option's type. Every category is a plain list, so a language toggle
+(`"Rust"`, `"Flutter"`, ...) sits inside `development` right alongside the
+editors that read it.
 
 **`programs.steam.enable = true`** lives here, not in
 [Gaming.nix](#modulesappsgaminggamingnix) — see that section for why.
@@ -281,23 +321,119 @@ touch this file to change what fields a user entry supports.
 - `hashedPassword`: generate with `mkpasswd -m sha-512`. `null` falls back
   to `initialPassword = "changeme"`.
 - `extraGroups`: `"wheel"` for sudo, `"adbusers"` for Android debugging
-  (see [AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)).
-- `availableApps` auto-discovers from `modules/apps/*/*.nix` — add an app
-  by dropping a folder there, nothing here changes.
+  (see [AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)).
+- `availableApps` auto-discovers from `modules/apps/**/*.nix` (any depth)
+  — add an app by dropping a folder anywhere under `modules/apps/`,
+  nothing here changes.
 - Every user's `home-manager-<name>.service` gets
   `after`/`wants = [ "network-online.target" ]` here, generically — any
   app's activation script that touches the network (currently
-  [ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix)'s mods/profile
+  [ZenBrowser.nix](#modulesappsutilszenbrowserzenbrowsernix)'s mods/profile
   fetch) would otherwise race the NIC coming up during boot.
+
+---
+
+## `modules/core/DevLanguages.nix`
+
+Declares `options.flake.devLanguages` — the same publish-data-at-`self`
+pattern as `flake.pluginPins`/`flake.matugenTemplates`/`flake.freeClaudeCode`
+— so that editors and language modules can be decoupled from each other
+entirely: a language module has no idea which editors exist, and an editor
+has no idea which languages exist, they only agree on this option's shape.
+
+- **The problem this solves**: before this, `Vscode.nix` hardcoded a
+  `dart-code.dart-code` reference and `AndroidStudio.nix` hardcoded a
+  `Dart`/`io.flutter` plugin reference, with no connection to whether Dart
+  tooling was actually installed anywhere — removing "Dart" as a concept
+  wouldn't have removed anything from either editor, and the reverse
+  (editors carrying extensions for languages you don't even have a
+  compiler for) was the actual complaint that prompted this file.
+- **Each `modules/apps/development/languages/<Lang>/<Lang>.nix`** sets
+  two things:
+  - `flake.homeModules.apps.<Lang>` — a completely normal app, installing
+    that language's LSP + toolchain (`rust-analyzer`+`rustc`+`cargo` for
+    Rust, `nil`+`nixfmt` for Nix, etc.). Toggled the same way as any other
+    app, via `vayori.apps`.
+  - `flake.devLanguages.<Lang>` — data only, no packages. Conventionally
+    `{ vscode = { nixpkgsExtensions; marketplaceExtensions; manualExtensions; settings; }; androidStudio = { autoPlugins; manualPlugins; }; }`,
+    but nothing here enforces that shape — an editor reads whichever
+    sub-keys it understands (`l.vscode or {}`) and ignores the rest, so a
+    language module can add an `androidStudio` block without every editor
+    needing a matching one, and a future editor can start reading
+    `flake.devLanguages` without every language module changing.
+- **Editors do the filtering, not this file**: `self.devLanguages` itself
+  is unfiltered (it's flake-level data, evaluated once, with no host to
+  filter against). All three editors — `Vscode.nix`, `AndroidStudio.nix`,
+  `Zed.nix` — each compute their own `enabledLanguages = lib.filterAttrs
+  (name: _: builtins.elem name vayoriApps) self.devLanguages` inside their
+  home-manager module (where `vayoriApps` — `config.vayori.apps`, threaded
+  via `home-manager.extraSpecialArgs` in `core/Users.nix` — is actually
+  available), then fold every enabled language's contribution into their
+  own extension/plugin/settings lists. Remove a language from
+  `vayori.apps` and its extensions vanish from every editor in the same
+  rebuild, with nothing to update in the editor files themselves.
+- **`Zed.nix` merges `settings` with `lib.recursiveUpdate`, not `//`
+  like `Vscode.nix`** — Zed's own settings schema nests everything
+  language-adjacent under a couple of shared top-level keys (`lsp.*`,
+  `languages.*`), so two languages that both configure an `lsp.*` entry
+  (or a language and this file's own generic settings, if a future
+  generic `lsp.*` entry gets added) need to survive under the same `lsp`
+  key rather than one clobbering the other - which is exactly what a
+  shallow `//` would do the moment two contributions touched the same
+  top-level settings key. `Kotlin.nix`'s `lsp.kotlin-language-server` /
+  `languages.Kotlin` is the one real example of this shape today.
+  VSCode's settings happen to never collide this way (every language uses
+  a distinct top-level key like `"[cpp]"`/`"[dart]"`/`"nix.*"`), so `//`
+  was safe there, but it's not a general guarantee - a future language
+  colliding with another under the same VSCode top-level key would need
+  the same fix.
+- **`nixpkgsExtensions` are dotted strings** (`"rust-lang.rust-analyzer"`),
+  not direct `pkgs.vscode-extensions.rust-lang.rust-analyzer` references —
+  language modules don't have `pkgs` in scope at the point they publish
+  this data (it's flake-level, evaluated once per flake, not per-system),
+  so the string gets resolved inside `Vscode.nix`'s own home-manager
+  module (which does have `pkgs`) via `lib.attrByPath (lib.splitString "."
+  dotted) (throw "...") pkgs.vscode-extensions`. The `throw` on a missing
+  path is deliberate — a typo'd extension name fails the build loudly
+  instead of silently installing nothing, which is exactly how `Kotlin.nix`
+  caught that `pkgs.vscode-extensions.fwcd.kotlin` doesn't actually exist
+  (nixpkgs only curates `mathiasfrohlich`'s Kotlin extension natively;
+  `fwcd`'s is marketplace-only) during a real build, not at review time.
+- **Manual (fetchurl-pinned) extensions/plugins still funnel through
+  `Vscode`/`AndroidStudio`'s own `flake.pluginPins` keys**, not a
+  per-language one — see the note in
+  [PluginUpdateCheck.nix](#modulescorepluginupdatechecknix) below for why
+  (the checker script only knows those two names). `Cpp.nix`'s
+  `cpp-extentions-pack` pin is the one example today: it lives in
+  `flake.devLanguages.Cpp.vscode.manualExtensions`, and `Vscode.nix`
+  aggregates every language's `manualExtensions` into
+  `flake.pluginPins.Vscode` itself, unfiltered by `vayori.apps` (same
+  reasoning as above — no host to filter against at that point).
+- **Dart and Flutter are one language module, `Flutter.nix`, not two** —
+  `pkgs.flutter` bundles its own Dart SDK, and every real Dart-using
+  project on this machine is a Flutter one anyway, so there was never a
+  case where splitting them into separate toggles bought anything. Its
+  VSCode contribution installs both `dart-code.dart-code` and
+  `dart-code.flutter` together (the Flutter extension doesn't work
+  without the Dart one, so it's not optional), and its Android Studio
+  contribution installs all 4 plugins (`Dart`, Flutter Enhancement Suite,
+  `flutter-intellij`, `flutter-intl`) the same way.
 
 ---
 
 ## `modules/core/PluginUpdateCheck.nix`
 
 A check-only, zero-extra-commands plugin/extension update reporter for
-[Vscode.nix](#modulesappsvscodevscodenix),
-[AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix), and
-[ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix). It never modifies a
+[Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix),
+[AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix), and
+[ZenBrowser.nix](#modulesappsutilszenbrowserzenbrowsernix) - **not**
+[Zed.nix](#modulesappsdevelopmenteditorszedzednix), which has nothing to
+check in the first place: `programs.zed-editor.extensions` is just a list
+of names Zed itself resolves and installs at its own startup (its
+`auto_install_extensions` setting), with no version or hash pinned
+anywhere in this repo to go stale - the same shape as ZenBrowser's own
+extensions/mods, just without even ZenBrowser's existence-checking, since
+there's no Nix-side fetch to fail in the first place. It never modifies a
 pin itself - it only prints what's stale so you can bump the version/hash
 by hand in the matching app file.
 
@@ -313,6 +449,18 @@ by hand in the matching app file.
   this refactor changes nothing about what gets installed - confirmed by
   rebuilding the toplevel and activation packages before and after and
   getting the same derivations.
+- **`Vscode`/`AndroidStudio`'s pins are now aggregated, not just hoisted**:
+  since [DevLanguages.nix](#modulescoredevlanguagesnix) split each editor's
+  language-specific extensions/plugins out into
+  `modules/apps/development/languages/*/*.nix`, `flake.pluginPins.Vscode`/
+  `.AndroidStudio` are built by folding every `self.devLanguages.*.vscode
+  .manualExtensions`/`.androidStudio.manualPlugins` in, on top of each
+  editor's own non-language-specific manual pins. This has to stay keyed
+  by editor (`Vscode`, `AndroidStudio`), not split into a `pins.Cpp` /
+  `pins.Rust` per language - the Python checker script below only ever
+  looks at `pins.get("Vscode", ...)`/`pins.get("AndroidStudio", ...)` by
+  name, so a per-language key would just be silently skipped, never
+  checked.
 - **Keys are `PascalCase`, matching `self.homeModules.apps`'s own
   attribute names exactly** (`Vscode`, `AndroidStudio`, `ZenBrowser`) -
   not the lowerCamelCase used for the *files'* folder names - so
@@ -336,9 +484,14 @@ by hand in the matching app file.
   time - every line had to actually pass lint, not just parse), built as
   `vayori-check-plugin-updates` and put on `$PATH` via
   `environment.systemPackages`. No `requests` dependency - just
-  `urllib.request` + a `ThreadPoolExecutor` so all ~60-odd checks (21
-  VS Code + 17 Android Studio + 17 Zen extensions + 8 Zen mods on this
-  host) run concurrently instead of one network round-trip at a time.
+  `urllib.request` + a `ThreadPoolExecutor` so every check runs
+  concurrently instead of one network round-trip at a time. Only manual
+  (fetchurl-pinned) entries have a `version` to check - on this host
+  that's currently 1 VS Code extension (`Cpp.nix`'s
+  `cpp-extentions-pack`) + 2 Android Studio plugins (WakaTime,
+  github-copilot-intellij) + 17 Zen extensions + 8 Zen mods; every
+  nix-vscode-extensions/nix-jetbrains-plugins-sourced extension tracks
+  upstream automatically and has nothing pinned to check.
   - VS Code: one POST per extension to the Marketplace's
     `extensionquery` API (`filterType 7` = exact `publisher.name`
     lookup, `flags 513` = versions + latest-only), comparing the
@@ -385,7 +538,7 @@ by hand in the matching app file.
     outdated) - it only ever prints something when there's an actual
     finding, so it doesn't add noise to every single build.
 - **Wired in via a zsh `preexec` hook in
-  [Terminal.nix](#modulesappsterminalterminalnix)**, not a shell
+  [Terminal.nix](#modulesappsutilsterminalterminalnix)**, not a shell
   alias/function - `preexec` fires for every command a user actually
   types before it runs, including ones prefixed with `sudo` (which
   bypasses a function/alias by doing its own `PATH` lookup). The hook
@@ -593,6 +746,26 @@ by this, confirmed by rebuilding before/after.
 - `material-symbols`: DMS's icon font.
 - `xdg-desktop-portal-gnome`: file pickers/screenshots/screencast for niri.
 - `xdg-desktop-portal-gtk`: GTK file chooser for Nautilus & co.
+- **`xdg.portal.configPackages = [ pkgs.niri ]`, not a hand-written
+  `config.common.default` list**: niri's own package ships
+  `share/xdg-desktop-portal/niri-portals.conf` (confirmed by building
+  `pkgs.niri` and reading it directly, not assumed from docs), which
+  routes `Access`/`Notification` to `gtk` and `Secret` to
+  `gnome-keyring` explicitly - none of which the old hand-rolled config
+  did. One correction worth recording: the shipped file's own
+  `default=gnome;gtk;` is *identical* to what this repo already had, so
+  switching to it does **not** change ScreenCast/Screenshot routing at
+  all, despite that being the headline complaint in
+  [niri-wm/niri#3798](https://github.com/niri-wm/niri/issues/3798) (a
+  different distro's packaging issue, not something reproduced or fixed
+  here). The real, verified value of this change is picking up niri's
+  own upstream-maintained routing instead of a hand-guessed one going
+  forward, not a screencast fix. `nixpkgs.overlays`/`configPackages`
+  wiring confirmed via `nix eval` (`xdg.portal.configPackages` resolves
+  to `["niri-26.04"]`) and `environment.pathsToLink` already carrying
+  `/share/xdg-desktop-portal` — not tested against an actual live
+  screen-share, which the VM/Xvfb methodology used elsewhere in this
+  repo can't exercise.
 
 **`vayori.theme.font` drives every declarative font setting**:
 `fontconfig.defaultFonts.sansSerif`, GTK app UI text (`gtk.font`), kitty,
@@ -724,6 +897,16 @@ of what makes this desktop this desktop.
   also searches `$XDG_DATA_HOME/icons` (`~/.local/share/icons`) *before*
   any Nix-store path, so this copy wins automatically — no search-path
   conflict with the read-only one GTK/Qt still reference by name.
+  Copied with `rsync -aL --delete --chmod=u+w`, not `rm -rf` + `cp -rL`
+  - the stamp-file gate above already makes this a one-time cost on a
+  given icon-package version, but the very first time it does run again
+  (the icon theme package itself bumping) `rsync` only transfers what
+  actually changed between two Papirus releases instead of recopying
+  the whole ~297k-file tree from scratch every time; `--chmod=u+w`
+  keeps the copy writable the same way the old `chmod -R u+w` did.
+  Functionally verified directly (not just evaluated): ran the exact
+  rendered command against the real store path, confirmed a full
+  writable copy and a writable SVG file inside it.
 - **Dynamic folder-color recoloring** (`vayori.matugenTemplates.papirusFolders`,
   one of the `[templates.<id>]` blocks merged into `config.toml` above):
   matugen has real, built-in support for driving `papirus-folders`
@@ -775,7 +958,7 @@ before this file existed). An app module still owns:
 **`androidStudio` is a function, not a plain string** — `schemeName: ''
 ...''` — because the `.icls` scheme needs its own name baked into itself
 (`metaInfo/originalScheme`, the `<scheme name="...">` attribute), a value
-[AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix) already
+[AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix) already
 computes locally for three other reasons (the output filename, the
 `global_color_scheme` XML pointer). Called as
 `self.matugenTemplates.androidStudio matugenSchemeName` — still a "public
@@ -788,9 +971,9 @@ byte-for-byte as published (only the file's own path/wiring is
 repo-specific) — `vesktop` has no InioX equivalent, it's the real
 machine's own curated QuickCSS theme with matugen values spliced in, see
 its own section for why. See each app's own section for per-app caveats
-(Cava/Btop under [Terminal.nix](#modulesappsterminalterminalnix), Heroic/
+(Cava/Btop under [Terminal.nix](#modulesappsutilsterminalterminalnix), Heroic/
 Steam/Wine under [Gaming.nix](#modulesappsgaminggamingnix), Vesktop under
-[Vesktop.nix](#modulesappsvesktopvesktopnix)).
+[Vesktop.nix](#modulesappsutilsvesktopvesktopnix)).
 
 ---
 
@@ -799,14 +982,14 @@ Steam/Wine under [Gaming.nix](#modulesappsgaminggamingnix), Vesktop under
 Named for what it actually is — system-level enablement for development
 workflows, not tied to any one app. Renamed from `dev-system.nix` during
 the project restructure specifically to stop reading as a near-duplicate
-of [apps/devTools/DevTools.nix](#modulesappsdevtoolsdevtoolsnix) (a
+of [apps/devTools/DevTools.nix](#modulesappsdevelopmentdevtoolsdevtoolsnix) (a
 completely different, per-user file — VS Code/git/gh/lazygit/
 docker-compose). `virtualisation.docker.enable`/`libvirtd.enable` are
 the actual system daemons `dev-tools`' `docker-compose` and any VM
 tooling need. `programs.adb.enable` was removed upstream — systemd 258+
 handles the adb uaccess udev rules automatically, and
 `pkgs.android-tools` (already in
-[AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)) covers
+[AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)) covers
 the `adb` command itself — `users.groups.adbusers` stays declared here
 purely as a valid `extraGroups` entry, it no longer grants anything on
 its own.
@@ -824,7 +1007,7 @@ first rebuild — if GRUB doesn't pick it up, `ls ${inputs.grub-theme}` in
 
 ---
 
-## `modules/apps/zenBrowser/ZenBrowser.nix`
+## `modules/apps/utils/zenBrowser/ZenBrowser.nix`
 
 **The profile is always `~/.zen/default`** — a fixed, predictable path
 this repo owns, rather than discovering/importing whatever a previous
@@ -933,7 +1116,7 @@ it's reused and re-synced on every `home-manager switch`.
     a network-less machine still apply the rest of the config) — found by
     actually booting a fresh VM and checking, not assumed.
 
-## `modules/apps/spicetify/Spicetify.nix`
+## `modules/apps/utils/spicetify/Spicetify.nix`
 
 **Custom font**: Spotify's client CSS reads its UI font from the
 `--font-family` custom property, not generic `font-family: sans-serif` —
@@ -945,9 +1128,33 @@ freeform attrset, so this is safe.
 
 ## `modules/apps/gaming/Gaming.nix`
 
-One file, one `vayori.apps` toggle, for everything Windows-gaming related —
-`lutris` + `heroic` as the two launchers, Steam alongside them, plus
-shared tooling.
+One `vayori.apps` toggle (`Gaming`), split across four files for
+readability rather than one large one — `lutris` + `heroic` as the two
+launchers, Steam alongside them, plus shared tooling:
+
+- **`Gaming.nix`** is the actual `flake.homeModules.apps.Gaming` entry. It
+  computes `gamesDir`/`shaderCacheDir` and `imports` the three fragments
+  below, threading those two paths to them via `_module.args` (a plain
+  function argument doesn't reach an imported module — `_module.args` is
+  the module system's mechanism for that; `self` needs no such threading,
+  it's already a home-manager `extraSpecialArg` visible to every module in
+  the tree, imports included).
+- **`_launchers.nix`**: `lutris`/`heroic`/`adwsteamgtk` packages, the
+  `~/Games` folder + GTK bookmark, and the Heroic/Steam matugen themes.
+- **`_proton.nix`**: Proton/Wine tooling (`umu-launcher`, `wine`,
+  `winetricks`, `protontricks`, `protonup-qt`), `$WINEPREFIX`, the Wine
+  matugen theme, and Lutris's default-runner config.
+- **`_performance.nix`**: `gamescope` + the two `gamescope-*` wrapper
+  scripts, MangoHud, and the NVIDIA shader-cache path.
+
+  All three fragments are **underscore-prefixed on purpose** — same
+  reason as `_hardware.nix` (see
+  [\_hardware.nix](#moduleshostsname_hardwarenix)): import-tree skips any
+  path containing `/_`, so these plain home-manager module fragments don't
+  also get auto-imported as their own (invalid - they use `home.packages`
+  etc, not flake-parts options) top-level flake-parts modules. They're
+  only ever reached via `Gaming.nix`'s own `imports = [ ./_launchers.nix
+  ./_proton.nix ./_performance.nix ];`.
 
 - **Steam itself is enabled in `Host.nix`, not here**:
   `programs.steam.enable = true` is a NixOS-level option (32-bit
@@ -1050,7 +1257,7 @@ shared tooling.
   Lutris/Heroic's own independently-managed per-game ones, for the same
   reason `WINEPREFIX` itself doesn't reach them (see below).
 
-## `modules/apps/nautilus/Nautilus.nix`
+## `modules/apps/utils/nautilus/Nautilus.nix`
 
 - `thumbnail-limit = 200`: thumbnail bigger files instead of a generic
   icon.
@@ -1065,7 +1272,7 @@ shared tooling.
 - gvfs + tumbler are enabled system-wide in `Host.nix` — they're daemons,
   not per-user.
 
-## `modules/apps/androidStudio/AndroidStudio.nix`
+## `modules/apps/development/editors/androidStudio/AndroidStudio.nix`
 
 `adb` device access works out of the box (systemd 258+ handles uaccess
 udev rules automatically) — `"adbusers"` in `extraGroups` is optional
@@ -1075,15 +1282,56 @@ Plugins and editor settings are captured as they exist on the real
 machine, pinned as Nix derivations rather than fetched live at
 activation time:
 
-- **17 real user-installed JetBrains plugins**, each fetched via
-  `pkgs.fetchurl` from `plugins.jetbrains.com/plugin/download?pluginId=<id>&version=<version>`
-  with a pinned content hash (`nix store prefetch-file`). Plugin ids and
-  versions came straight from each installed plugin's own
-  `META-INF/plugin.xml`; the marketplace download endpoint accepts the
-  plugin's own XML id string directly, no numeric marketplace id needed.
-  Bundled/built-in components (e.g. `marketplace`, `vcs-hg`) were
-  excluded by cross-referencing the real install's own
-  `bundled_plugins.txt`.
+- **17 real user-installed JetBrains plugins** (with every language app
+  enabled, the default on this host - fewer if one is turned off), split
+  across three sources:
+  - `androidStudioAutoPlugins` (8, generic - Catppuccin Theme, the Claude
+    Code plugin, git-worktree-manager, Discord integration, lsp4ij,
+    One Dark theme, `vcs-perforce`, `vcs-svn`): resolved through
+    `inputs.nix-jetbrains-plugins.plugins.<system>."android-studio".<build>.<xmlId>`
+    (the [nix-community/nix-jetbrains-plugins](https://github.com/nix-community/nix-jetbrains-plugins)
+    input), where `<build>` is `pkgs.androidStudioPackages.stable.version`
+    read live, not hardcoded - so this only ever asks for plugins
+    compatible with the *exact* installed build, confirmed to exist as a
+    literal index key (`"2026.1.3.7"`) before relying on it. Solves what
+    used to be a real gap: manually-pinned marketplace "latest" isn't
+    necessarily compatible with the installed build at all, it's just
+    whatever's newest overall.
+  - **7 more, language-specific, sourced the same way but from
+    [DevLanguages.nix](#modulescoredevlanguagesnix)**: `Flutter.nix`
+    contributes 4 (`Dart`, Flutter Enhancement Suite, `flutter-intellij`,
+    `flutter-intl` - Dart and Flutter are one language toggle here, see
+    that section), `Kotlin.nix` contributes `kmm-plugin` (Kotlin
+    Multiplatform - Android Studio's own Kotlin support is already built
+    in, this is just the one bit that isn't), `Nix.nix` contributes
+    NixIDEA, `Python.nix` contributes `python-ce`. `AndroidStudio.nix`
+    filters `self.devLanguages` down to whichever language apps are in
+    `vayori.apps` and folds each one's `androidStudio.autoPlugins` into
+    the same `allAutoPlugins` list the 8 generic ones are already in -
+    turn a language off and its plugins disappear from this list on the
+    next rebuild, nothing to edit here.
+  - `androidStudioManualPluginsSpec` (2 holdouts - `WakaTime.jar` and
+    `github-copilot-intellij`, both generic): still fetched the original
+    way, via `pkgs.fetchurl` from
+    `plugins.jetbrains.com/plugin/download?pluginId=<id>&version=<version>`
+    with a pinned content hash. WakaTime isn't in the auto index at all.
+    GitHub Copilot *is*, but its build there runs `autoPatchelf` against
+    a bundled native Node addon and fails outright - missing
+    `libsecret`/`libglib`/`libX11`/`libpipewire`/`libei`/etc, a real
+    build failure hit while migrating, not a guess - so it stays on the
+    plain `fetchurl`+`unzip` path that never touches `autoPatchelf` and
+    has always worked.
+  - `flake.pluginPins.AndroidStudio` only exposes these 2 manual
+    holdouts (plus any future language module's own `manualPlugins`,
+    though none currently has one) - the 15 auto-tracked ones don't need
+    [PluginUpdateCheck.nix](#modulescorepluginupdatechecknix) watching
+    them; they update whenever the `nix-jetbrains-plugins` input does.
+  - Plugin ids and versions originally came straight from each installed
+    plugin's own `META-INF/plugin.xml`; the marketplace download
+    endpoint accepts the plugin's own XML id string directly, no numeric
+    marketplace id needed. Bundled/built-in components (e.g.
+    `marketplace`, `vcs-hg`) were excluded by cross-referencing the real
+    install's own `bundled_plugins.txt`.
 - **`pkgs.jetbrains.plugins.addPlugins` does not work here** — it assumes
   a plain (non-FHS) IDE layout with `plugins/` nested under
   `$out/<mainProgram>/`. `pkgs.androidStudioPackages.stable` is an
@@ -1127,7 +1375,7 @@ activation time:
   ownership of that file otherwise.
 - **`androidStudioWithFcc`**: `androidStudioPackages.stable` wrapped
   (`pkgs.symlinkJoin` + `makeWrapper`) to `--set` the
-  [Free Claude Code](#modulesappsfreeclaudecodefreeclaudecodenix)
+  [Free Claude Code](#modulesappsdevelopmentfreeclaudecodefreeclaudecodenix)
   `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env vars on the real
   `android-studio` binary specifically, not system-wide. Confirmed by
   inspecting the built wrapper directly: it exports the vars then
@@ -1138,22 +1386,65 @@ activation time:
   needed. `home.packages` uses this wrapped derivation in place of the
   raw `androidStudioPackages.stable`.
 
-## `modules/apps/vscode/Vscode.nix`
+## `modules/apps/development/editors/vscode/Vscode.nix`
 
 `programs.vscode.profiles.default` (`userSettings`, `keybindings`,
 `extensions`), the current home-manager schema — not the older flat
 `programs.vscode.userSettings` shape. Settings, the one custom
-keybinding (`ctrl+y` unbound from `editor.action.deleteLines`), and all
-47 extensions are a direct transcription of the real
-`~/.config/Code/User/` on this machine, not a live importer:
+keybinding (`ctrl+y` unbound from `editor.action.deleteLines`), and every
+extension are a direct transcription of the real `~/.config/Code/User/`
+on this machine, not a live importer - but as of
+[DevLanguages.nix](#modulescoredevlanguagesnix), split between generic
+ones declared right here and language-specific ones this file only
+aggregates:
 
-- `nixpkgsExtensions`: extensions available pre-packaged in
-  `pkgs.vscode-extensions`.
-- `marketplaceExtensions`: the remaining extensions not in nixpkgs,
-  built via `pkgs.vscode-utils.extensionsFromVscodeMarketplace`, each
-  pinned to the installed `{ name, publisher, version, hash }` with a
-  content hash from `nix store prefetch-file` against the Marketplace's
-  VSIX asset URL.
+- `nixpkgsExtensions`/`vscodeAutoExtensions` here are the **generic**
+  ones only - nothing tied to a specific language. `nixpkgsExtensions`:
+  pre-packaged in `pkgs.vscode-extensions`. `vscodeAutoExtensions`:
+  resolved through `pkgs.vscode-marketplace.<publisher>.<name>`, the
+  overlay from the
+  [nix-community/nix-vscode-extensions](https://github.com/nix-community/nix-vscode-extensions)
+  input (`nixpkgs.overlays` in
+  [Host.nix](#moduleshostsdiablohostnix)) - daily-refreshed, no hash to
+  compute by hand; its tracked "latest" can lag the true Marketplace
+  latest by a version, since it's a daily heuristic scrape, not strict
+  semver - a real but minor tradeoff against never having a hash to bump
+  manually again.
+- **Every language-specific extension lives in
+  `modules/apps/development/languages/*/*.nix` instead** (C/C++'s
+  `cpptools`, Rust's `rust-analyzer`, Kotlin's `fwcd.kotlin` +
+  `mathiasfrohlich.kotlin` + Gradle support, Dart's and Flutter's own
+  extensions, Nix's `nix-ide` + `nix-forge`, Qt's `qt-core`/`qt-qml`,
+  Python's `ms-python.*` + Pylance).
+  This file's home-manager module filters `self.devLanguages` down to
+  whichever language apps are actually in `vayori.apps`
+  (`enabledLanguages`), then folds each one's `vscode.nixpkgsExtensions`/
+  `.marketplaceExtensions`/`.manualExtensions`/`.settings` into its own
+  lists/`vscodeSettings` before building `programs.vscode`. A
+  `nixpkgsExtensions` entry here is a dotted string
+  (`"rust-lang.rust-analyzer"`) rather than a direct `pkgs.vscode-
+  extensions.rust-lang.rust-analyzer` reference, resolved via
+  `lib.attrByPath (lib.splitString "." dotted) (throw "...")
+  pkgs.vscode-extensions` - language modules don't have `pkgs` in scope
+  when they publish this data (flake-level, evaluated once, not per
+  system), only this file's own per-system module does.
+- The one remaining manual (fetchurl-pinned) extension -
+  `boundarystudio.cpp-extentions-pack` - moved with the rest of C/C++'s
+  extensions into `Cpp.nix`'s `flake.devLanguages.Cpp.vscode
+  .manualExtensions`, not in this file's own `let` anymore. It's still
+  not on the nix-vscode-extensions index (checked, not assumed), so it
+  stays on the original mechanism -
+  `pkgs.vscode-utils.extensionsFromVscodeMarketplace`, pinned to
+  `{ name, publisher, version, hash }` with a content hash from `nix
+  store prefetch-file` against the Marketplace's VSIX asset URL. This
+  file aggregates every enabled language's `manualExtensions` back into
+  `flake.pluginPins.Vscode` itself (see the note in
+  [PluginUpdateCheck.nix](#modulescorepluginupdatechecknix) for why it
+  has to stay under this one key rather than a per-language one) - so
+  it's still the only one exposed there today; every
+  nix-vscode-extensions-sourced one doesn't need
+  [PluginUpdateCheck.nix](#modulescorepluginupdatechecknix) to watch it
+  at all.
 
 VSCode itself moved out of `DevTools.nix` into its own module once it
 needed this much dedicated configuration — `DevTools.nix` keeps only
@@ -1201,13 +1492,164 @@ needed this much dedicated configuration — `DevTools.nix` keeps only
   later one replacing the earlier one outright, so comments end up both
   colored and italic, matching original intent plus the added color.
 
-## `modules/apps/devTools/DevTools.nix`
+## `modules/apps/development/editors/zed/Zed.nix`
+
+`programs.zed-editor` (home-manager's native module) — `extensions` and
+`userSettings`, a direct transcription of the real `~/.config/zed/` on
+this machine (both the installed-extensions list and `settings.json`),
+split generic-vs-language-specific the same way as
+[Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix), one commit
+after Vscode/AndroidStudio had already gone through this split - so this
+file only ever had to *aggregate*
+[DevLanguages.nix](#modulescoredevlanguagesnix) contributions, never carry
+language-specific settings of its own to begin with.
+
+- **Extensions are just names, not files or hashes** — unlike VS Code's
+  marketplace extensions (fetched and pinned as Nix derivations) or
+  Android Studio's plugins (same), `programs.zed-editor.extensions`
+  becomes Zed's own `auto_install_extensions` setting, and Zed resolves
+  and downloads each one itself at its *own* next startup. Nix's only
+  job here is writing the list of names - there's nothing to pin, hash,
+  or feed to [PluginUpdateCheck.nix](#modulescorepluginupdatechecknix)
+  (see the note in that section for why Zed isn't one of the three
+  editors it watches).
+- **`mutableUserSettings` is left at its default (`true`)** — Zed's
+  activation script merges this file's declared settings on top of
+  whatever's already in `~/.config/zed/settings.json` (`jq '$dynamic *
+  $static'`, confirmed by reading the real generated activation script)
+  rather than replacing the file outright the way VSCode's `force`-style
+  writes do. Declared settings still win on every rebuild; the file just
+  stays a normal editable file in between, matching how Zed itself
+  expects to be able to write to it (e.g. from its own settings UI).
+- **The real `~/.config/zed/settings.json`'s WakaTime API key is
+  deliberately NOT in this file** — `lsp.wakatime.initialization_options
+  .api-key` held a live, real key in the source config; committing it
+  here would mean shipping a real credential in a public git repo. Left
+  out entirely rather than pinned/redacted, with a comment at the
+  omission site pointing at the two real alternatives (set it locally
+  through Zed's own settings, or wire it through a proper secrets
+  mechanism like sops-nix/agenix if it needs to be declarative).
+- **`ui_font_family`/`buffer_font_family` use `vayoriTheme.font`**, not
+  the real config's literal `"JetBrains Mono"` — same reasoning as
+  [Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix)'s
+  `editor.fontFamily`: every app's font should track the one shared
+  `vayori.theme.font` setting, not carry its own independent copy of the
+  font name that'd drift the next time that setting changes.
+- **Kotlin's Zed contribution pulls in `java` and `groovy` alongside
+  `kotlin`** — real Kotlin/Android projects mix in Java interop files and
+  Groovy Gradle build scripts often enough that gating them independently
+  would just mean two more toggles that are, in practice, always flipped
+  together with Kotlin. Its settings block
+  (`lsp.kotlin-language-server.settings.compiler.jvm.target`,
+  `languages.Kotlin.language_servers`) is the one real case where
+  [DevLanguages.nix](#modulescoredevlanguagesnix)'s note about
+  `lib.recursiveUpdate` vs. `//` matters in practice today.
+- **`Cpp`'s only Zed extension is `neocmake`** — Zed ships C/C++ (clangd)
+  support natively, so unlike VSCode there's no `cpptools`-equivalent
+  extension to install; CMake project-file support is the one real gap
+  it fills in.
+- **`Rust` and `Python` have no Zed extension at all** — same reasoning
+  as C/C++: Zed bundles both natively (rust-analyzer, and a Pyright-based
+  Python language server). `flake.devLanguages.Rust`/`.Python` simply have
+  no `zed` key, and `Zed.nix`'s `l.zed or { }` handles that the same way
+  it handles any other language not contributing a `zed` block.
+- **`arduino` was in the real installed-extensions list but is dropped
+  here on request** — along with the `lsp.arduino-language-server`
+  settings block it needed, since nothing here actually uses it.
+- **Zed gets a real matugen-driven theme, not a static one** — the real
+  config's `{mode: "system", light: "Ayu Light", dark: "One Dark Pro
+  Night Flat"}` becomes a single `theme = "Matugen"` string instead (see
+  `vayori.matugenTemplates.zed`, registered right below
+  `programs.zed-editor` in this file, output to
+  `~/.config/zed/themes/matugen.json`). The template itself is
+  [Matugen.nix](#modulesdesktopmatugennix)'s `zed` entry - unlike every
+  other app's matugen template here, it wasn't ported from an existing
+  static theme or community source; it's hand-authored directly against
+  Zed's own published theme schema
+  (`https://zed.dev/schema/themes/v0.2.0.json`, fetched and checked
+  against, not guessed at) since `ThemeStyleContent` there has zero
+  required keys - it sets the ~140 keys that cover the visible surface
+  (editor, panels, terminal, git status colors, 19 syntax-highlighting
+  scopes) and lets Zed fall back to its own defaults for the rest.
+  Verified by rendering the actual built template with dummy colors
+  substituted for every `{{ }}` placeholder and checking the result is
+  valid JSON with every key present in the real schema's property list -
+  not something a GUI app running headless could otherwise be confirmed
+  against in this environment.
+
+## `modules/apps/development/languages/*/*.nix`
+
+Seven independent `vayori.apps` toggles, each installing one language's own
+LSP/toolchain and telling the editors above what to install for it - see
+[DevLanguages.nix](#modulescoredevlanguagesnix) for the mechanism. All
+seven are enabled on this host today - confirmed with a real build, not
+just individually: every one flipped off *at once*, rebuilt, and each
+editor's extension/plugin list dropped to exactly its generic set (VSCode
+50→21, Android Studio 17→10, Zed 16→8) with zero language packages left
+on `$PATH`, then flipped back on and rebuilt clean again.
+
+| App | Packages | VSCode extension(s) | Android Studio | Zed |
+| --- | --- | --- | --- | --- |
+| `Cpp` | `clang-tools` (clangd + clang-format), `cmake`, `gdb` | `ms-vscode.cpptools`(-extension-pack), `cmake-tools`, `twxs.cmake`, `vadimcn.vscode-lldb`, `boundarystudio.cpp-extentions-pack` (manual) + 3 marketplace | - | `neocmake` |
+| `Rust` | `rustc`, `cargo`, `rust-analyzer`, `rustfmt`, `clippy` | `rust-lang.rust-analyzer` | - | - (bundled) |
+| `Kotlin` | `kotlin`, `kotlin-language-server` | `mathiasfrohlich.kotlin`, `vscjava.vscode-gradle` + `fwcd.kotlin`/`esafirm.kotlin-formatter`/`naco-siren.gradle-language` (marketplace) | `kmm-plugin` (Kotlin Multiplatform - regular Kotlin support is already built in) | `kotlin`, `java`, `groovy` + JVM target/language-server settings |
+| `Flutter` | `flutter` (bundles its own Dart SDK - covers Dart too, see below) | `dart-code.dart-code` + `dart-code.flutter` | `Dart`, Flutter Enhancement Suite, `flutter-intellij`, `flutter-intl` | `dart`, `flutter-snippets` |
+| `Nix` | `nil`, `nixfmt` | `jnoortheen.nix-ide`, `arrterian.nix-env-selector` + `ziyyun.nix-forge`/`pinage404.nix-extension-pack` (marketplace) | NixIDEA | `nix` |
+| `Qt` | `kdePackages.qtdeclarative` (qmlls) | `theqtcompany.qt-core`/`qt-qml` (marketplace) | - | `qml` |
+| `Python` | `python3` | `ms-python.python`/`vscode-pylance`/`debugpy`/`vscode-python-envs` + `kevinrose.vsc-python-indent`/`njqdev.vscode-python-typehint` (marketplace) | `python-ce` | - (bundled) |
+
+- **`fwcd.kotlin` is a marketplace extension, not a `pkgs.vscode-
+  extensions` one** - nixpkgs' own curated set only has
+  `mathiasfrohlich`'s Kotlin extension. Caught by the `throw` in
+  `Vscode.nix`'s dotted-string resolver failing a real build - not
+  something documentation or a search would have surfaced, since
+  `mathiasfrohlich.kotlin` (a similarly-named, actually-present
+  extension) made the mistake easy to make.
+- **`Flutter` is Dart too - one toggle, not two** - see the note in
+  [Zed.nix](#modulesappsdevelopmenteditorszedzednix)'s section above for
+  the two real reasons (bundled SDK, always used together in practice).
+  A real build failure surfaced a second, sharper reason while these were
+  still separate modules: `pkgs.dart` and `pkgs.flutter` both ship a
+  top-level `version` file, and having both in the same `home.packages`
+  broke `home-manager`'s `buildEnv` outright (`pkgs.buildEnv error: two
+  given paths contain a conflicting subpath`) - not a style preference,
+  a genuine conflict that merging them into one toggle sidesteps
+  entirely rather than working around.
+- **`Cpp` and `C` are one toggle, not two** - there's no extension or
+  language-server story in this repo that treats plain C differently
+  from C++ (`cpptools`, `clangd`, and `clang-format` all handle both), so
+  splitting them would just be two toggles that always get enabled
+  together in practice.
+- **`Python`'s only real package is the interpreter itself** - Pylance
+  (VSCode), `python-ce` (Android Studio), and Zed's own bundled Pyright
+  all do their own analysis without a separate LSP binary on `$PATH`, so
+  `pkgs.python3` is the one thing actually missing without this toggle.
+  `github.copilot.enable.python = false` in `Vscode.nix`'s generic
+  settings is left alone regardless - it's Copilot config, not gated on
+  any extension actually being installed (Copilot itself isn't, see that
+  section), same as its `cpp`/`html`/`css`/etc. siblings.
+- **`pkgs.python314` already shows up on `$PATH` even with `Python`
+  disabled** - not a bug in this toggle, confirmed while negative-testing
+  it: [FreeClaudeCode.nix](#modulesappsdevelopmentfreeclaudecodefreeclaudecodenix)
+  installs it unconditionally for its own `uv sync` setup step, entirely
+  independent of this language toggle. Both can be true at once - `Python`
+  off still means no Pylance/`python-ce`/Python-specific settings in any
+  editor, it just doesn't mean "no Python interpreter anywhere on this
+  machine" as long as FreeClaudeCode is also enabled.
+- **`Nix.nix`'s `nil`/`nixfmt` packages overlap with `Host.nix`'s
+  system-wide `environment.systemPackages`** (installed there for
+  root/system-level editing, independent of any user's `vayori.apps`) -
+  deliberately left as-is rather than deduplicated, since the Nix store
+  dedups the actual derivation either way and the two lists serve
+  different scopes (system vs. per-user).
+
+## `modules/apps/development/devTools/DevTools.nix`
 
 `git` isn't listed here — it's already in `environment.systemPackages`
 (`Host.nix`), since flakes need it system-wide regardless of which apps
 are picked.
 
-## `modules/apps/bitwarden/Bitwarden.nix`
+## `modules/apps/utils/bitwarden/Bitwarden.nix`
 
 Just `pkgs.bitwarden-desktop` — the nixpkgs attribute name is
 `bitwarden-desktop`, not `bitwarden` (that alias throws a
@@ -1226,10 +1668,10 @@ rebuild. Once known, it can be set declaratively instead: `programs.rbw
 = { enable = true; settings = { email = "you@example.com"; pinentry =
 pkgs.pinentry-gtk2; }; };`.
 
-## `modules/apps/terminal/Terminal.nix`
+## `modules/apps/utils/terminal/Terminal.nix`
 
 Kitty + zsh (oh-my-zsh) + fastfetch + Starship + eza, one selectable app.
-`initContent` picks a random logo from `modules/apps/terminal/images/`
+`initContent` picks a random logo from `modules/apps/utils/terminal/images/`
 per shell (falls back to fastfetch's default if the directory is empty).
 The zsh plugin list and fastfetch's `modules` array are named `let`
 bindings (`zshPlugins`, `fastfetchModules`) rather than inlined — same
@@ -1277,7 +1719,7 @@ identical output by rebuilding before/after.
   covered there: `spicetify/spicetify.nix`'s theme (`hazy`,
   `colorScheme = "Base"`) and `starshipSettings` here are both direct,
   hand-extracted transcriptions of the real machine's actual config (see
-  [spicetify.nix](#modulesappsspicetifyspicetifynix) and the Starship
+  [spicetify.nix](#modulesappsutilsspicetifyspicetifynix) and the Starship
   note above) - InioX's templates are a completely different theme/
   prompt layout for each, not just different colors, and there's no
   clean way to splice in just a dynamic palette without restructuring
@@ -1285,11 +1727,11 @@ identical output by rebuilding before/after.
   everywhere isn't the goal; not clobbering curated settings is a bigger
   priority than covering every app InioX supports.
 
-## `modules/apps/vesktop/Vesktop.nix`
+## `modules/apps/utils/vesktop/Vesktop.nix`
 
 Two real config files pinned straight off the reference machine, plus a
 matugen-driven theme — same "capture what's actually there, don't guess"
-approach as [AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix).
+approach as [AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix).
 Declared as plain Nix attrsets (`vesktopSettings`, `vencordSettings`,
 `vencordPlugins`), written out with `builtins.toJSON` — not two static
 `.json` files copied in — so the settings live and read as ordinary Nix
@@ -1332,14 +1774,29 @@ data like everywhere else in this repo, not as opaque blobs.
   code rules out some *other* enabled plugin's dependency graph
   eventually mattering here, so keeping all twelve explicit costs
   little and removes the question entirely.
-- **`home.file` + `force = true`**, not a plain `.text`/`.source`
-  without it: Vesktop rewrites both of these itself whenever a setting
-  is toggled through its own UI, so without `force` a rebuild would
-  refuse to overwrite a file it no longer recognizes as home-manager's
-  own. Same trade-off already accepted elsewhere in this repo for
-  exactly this reason (DMS's `settings.json`, Lutris's
-  `runners/wine.yml`) — an in-app change sticks until the next rebuild,
-  then resets to what's declared here.
+- **`programs.vesktop` / `programs.vesktop.vencord.settings`**, not
+  hand-written `home.file` entries: home-manager grew a native module
+  for this since this file was first written (confirmed present in the
+  exact home-manager revision this flake already has locked before
+  switching, not assumed from a newer one). It writes to the identical
+  two paths this file always used
+  (`~/.config/vesktop/settings.json` and
+  `~/.config/vesktop/settings/settings.json`), so `vesktopSettings` and
+  `vencordSettings // { plugins = vencordPlugins; }` slot straight into
+  `settings`/`vencord.settings` with no restructuring. One real
+  difference from the old `home.file … { force = true; }` approach: the
+  native module doesn't force-overwrite, so a pre-existing *unmanaged*
+  settings file from an earlier manual Vesktop launch (Vesktop rewrites
+  these itself whenever a setting is toggled in its own UI, same
+  in-app-change-until-next-rebuild trade-off as DMS's `settings.json` or
+  Lutris's `runners/wine.yml`) could collide with home-manager's own
+  file on the very first switch to this module — a one-time `rm` of
+  those two files avoids it. Deliberately *not* using
+  `programs.vesktop.vencord.extraQuickCss` for the CSS below - that
+  writes a static file to the exact path matugen already regenerates
+  live on every wallpaper change, so it stays as its own
+  `home.file`/`vayori.matugenTemplates` entry, untouched by this
+  migration.
 - **QuickCSS + matugen**: the real machine's `settings/quickCss.css` was
   already a curated theme, not a blank slate — DiscordRecolor
   (mwittrien/BetterDiscordAddons), an `@import` plus a `:root` block of
@@ -1366,16 +1823,16 @@ data like everywhere else in this repo, not as opaque blobs.
   this repo; `useQuickCss = true;` in `vencordSettings` (already true on
   the real machine) is what makes Vesktop actually load it.
 
-## `modules/apps/freeClaudeCode/FreeClaudeCode.nix`
+## `modules/apps/development/freeClaudeCode/FreeClaudeCode.nix`
 
 Wires [Free Claude Code](https://github.com/Alishahryar1/free-claude-code)
 (FCC) — a local proxy that lets Claude Code's CLI/extensions talk to
 non-Anthropic model providers (NVIDIA NIM by default, matching upstream's
 own documented Quick Start) instead of Anthropic's API — into the CLI,
 the already-installed VS Code extension
-([Vscode.nix](#modulesappsvscodevscodenix)), and Android Studio's
+([Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix)), and Android Studio's
 already-installed plugin
-([AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)).
+([AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)).
 
 - **Not a from-scratch Nix derivation, deliberately**: FCC requires
   Python 3.14+ and pulls in ~20 dependencies (several, like `httpx2` and
@@ -1387,7 +1844,7 @@ already-installed plugin
   `uv` manages the Python interpreter itself, nothing extra needed in
   `home.packages` for that. Same trade-off already made for Zen
   Browser's mods/profile fetch
-  ([ZenBrowser.nix](#modulesappszenbrowserzenbrowsernix)) — a real
+  ([ZenBrowser.nix](#modulesappsutilszenbrowserzenbrowsernix)) — a real
   network dependency for something too fast-moving to fully pin, not
   the norm elsewhere in this repo.
 - **The bootstrap unit is deliberately *not* run inline in
@@ -1473,7 +1930,7 @@ already-installed plugin
   registry is genuinely unverified. Android Studio itself is covered a
   different, more direct way instead - see below.
 - **`androidStudioWithFcc`** (in
-  [AndroidStudio.nix](#modulesappsandroidstudioandroidstudionix)): the
+  [AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)): the
   real fix for Android Studio specifically. `pkgs.symlinkJoin` +
   `makeWrapper` wraps the real `android-studio` binary, `--set`-ing the
   same FCC env vars VS Code's extension gets, scoped to Android Studio's

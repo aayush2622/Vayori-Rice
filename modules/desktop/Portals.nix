@@ -6,7 +6,7 @@
         pkgs.xdg-desktop-portal-gnome
         pkgs.xdg-desktop-portal-gtk
       ];
-      config.common.default = [ "gnome" "gtk" ];
+      configPackages = [ pkgs.niri ];
     };
 
     security.polkit.enable = true;
