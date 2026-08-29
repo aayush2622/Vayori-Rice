@@ -22,10 +22,9 @@
     nix-jetbrains-plugins.url = "github:nix-community/nix-jetbrains-plugins";
     nix-jetbrains-plugins.inputs.nixpkgs.follows = "nixpkgs";
 
-    grub-theme = {
-      url = "github:MrVivekRajan/Grub-Themes";
-      flake = false;
-    };
+    elegant-grub2-themes.url = "git+https://github.com/vinceliuice/Elegant-grub2-themes";
+    elegant-grub2-themes.inputs.nixpkgs.follows = "nixpkgs";
+    elegant-grub2-themes.inputs.elegant-grub2-theme-src.url = "git+https://github.com/vinceliuice/Elegant-grub2-themes";
 
     dms.url = "github:AvengeMedia/DankMaterialShell/stable";
     dms.inputs.nixpkgs.follows = "nixpkgs";

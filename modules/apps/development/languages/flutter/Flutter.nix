@@ -1,6 +1,4 @@
 { ... }: {
-  # Combined Dart + Flutter - one toggle, since pkgs.flutter already bundles
-  # its own Dart SDK and every real project here uses both together anyway.
   flake.devLanguages.Flutter = {
     vscode = {
       nixpkgsExtensions = [
@@ -36,8 +34,6 @@
     };
   };
 
-  # pkgs.flutter bundles its own Dart SDK, so it's the only package needed
-  # for both.
   flake.homeModules.apps.Flutter = { pkgs, ... }: {
     home.packages = with pkgs; [ flutter ];
   };

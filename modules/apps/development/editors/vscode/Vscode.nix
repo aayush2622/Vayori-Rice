@@ -1,9 +1,5 @@
 { self, inputs, lib, ... }:
 let
-  # Everything language-specific (extensions, settings, LSP/toolchain packages)
-  # lives in modules/apps/development/languages/*/*.nix and is published to
-  # self.devLanguages - this file only knows about generic, always-useful
-  # extensions, and aggregates whichever languages are actually enabled.
   vscodeAutoExtensions = [
     { publisher = "chadalen"; name = "vscode-jetbrains-icon-theme"; }
     { publisher = "codista"; name = "vscode-autosave"; }
@@ -15,12 +11,6 @@ let
     { publisher = "yandeu"; name = "five-server"; }
   ];
 in {
-  # Manual (fetchurl-pinned) extensions are collected from every enabled
-  # language module - the checker script only ever looks at pins.Vscode by
-  # name, so this has to be the one place they all funnel into, regardless
-  # of which language owns each one. Unfiltered by vayori.apps here on
-  # purpose (self.devLanguages has no host to filter against yet) -
-  # PluginUpdateCheck.nix does that filtering per-host.
   flake.pluginPins.Vscode = lib.concatMap (l: l.vscode.manualExtensions or [ ]) (lib.attrValues self.devLanguages);
 
   flake.homeModules.apps.Vscode = { pkgs, lib, vayoriTheme, vayoriApps, ... }:

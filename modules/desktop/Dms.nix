@@ -104,7 +104,7 @@
           (name: builtins.elem "wheel" config.vayori.users.${name}.extraGroups)
           (builtins.attrNames config.vayori.users));
 
-      home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: {
+      home-manager.users = lib.genAttrs (builtins.attrNames config.vayori.users) (name: { pkgs, lib, ... }: {
         imports = [
           inputs.dms.homeModules.dank-material-shell
           inputs.dms-plugin-registry.nixosModules.default
@@ -126,14 +126,22 @@
             };
           };
         };
-        xdg.stateFile."DankMaterialShell/session.json" = {
-          force = true;
-          text = builtins.toJSON {
-            configVersion = 4;
-            wallpaperPath = "${./../assets/wallpapers}/wallhaven-w5xdzx.jpg";
-            wallpaperCyclingFolderPath = "${./../assets/wallpapers}";
-          };
-        };
+        home.activation.seedDmsSession =
+          let
+            defaultSession = pkgs.writeText "dms-default-session.json" (builtins.toJSON {
+              configVersion = 4;
+              wallpaperPath = "${./../assets/wallpapers}/wallhaven-w5xdzx.jpg";
+              wallpaperCyclingFolderPath = "${./../assets/wallpapers}";
+            });
+          in
+          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            sessionFile="$HOME/.local/state/DankMaterialShell/session.json"
+            if [ ! -e "$sessionFile" ]; then
+              run mkdir -p "$(dirname "$sessionFile")"
+              run cp "${defaultSession}" "$sessionFile"
+              run chmod u+w "$sessionFile"
+            fi
+          '';
         programs.dank-material-shell = {
           enable = true;
 

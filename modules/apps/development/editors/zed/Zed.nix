@@ -7,12 +7,6 @@
     languageExtensions = lib.unique (lib.concatMap (v: v.extensions or [ ]) languageZed);
     languageSettings = lib.foldl' lib.recursiveUpdate { } (map (v: v.settings or { }) languageZed);
 
-    # Generic extensions/settings - everything language-specific instead
-    # lives in modules/apps/development/languages/*/*.nix, same split as
-    # Vscode.nix. Transcribed from the real ~/.config/zed/settings.json and
-    # installed-extensions list on this machine, not a live importer.
-    # (arduino - and its lsp.arduino-language-server settings - dropped:
-    # not something actually used here.)
     extensions = [
       "catppuccin"
       "catppuccin-icons"
@@ -41,11 +35,6 @@
       ui_font_size = 16;
       buffer_font_size = 15;
       base_keymap = "JetBrains";
-      # A single matugen-driven theme, not the {mode,light,dark} pair the
-      # real config used - same reasoning as Vscode.nix's one dynamic
-      # "Dynamic Base16 DankShell": matugen only ever renders whichever
-      # palette is current, so there's nothing for a separate light/dark
-      # pair to mean here. See vayori.matugenTemplates.zed below.
       theme = "Matugen";
       session.trust_all_worktrees = true;
       agent = {
@@ -62,12 +51,6 @@
         "codex-acp".type = "registry";
         "github-copilot-cli".type = "registry";
       };
-      # lsp.wakatime.initialization_options.api-key is intentionally NOT
-      # transcribed here - it's a real, live API key in the source
-      # settings.json, and this repo is public. Set it locally instead
-      # (Zed's own settings UI, or a WakaTime CLI login), or wire it in
-      # through a proper secrets mechanism (sops-nix, agenix) if it needs
-      # to be declarative.
     } languageSettings;
   in {
     programs.zed-editor = {

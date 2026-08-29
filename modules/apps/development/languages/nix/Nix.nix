@@ -26,9 +26,6 @@
     };
   };
 
-  # Host.nix already installs nil/nixfmt system-wide for root/system-level
-  # editing, but that's independent of this per-user, per-language toggle -
-  # nix store dedups the two so there's no real duplication either way.
   flake.homeModules.apps.Nix = { pkgs, ... }: {
     home.packages = with pkgs; [
       nil

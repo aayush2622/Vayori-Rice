@@ -17,8 +17,6 @@
     };
   };
 
-  # qt5ct/qt6ct in Baseline.nix are unconditional GTK/Qt theming, unrelated
-  # to this - this is just the QML language server (qmlls) for editor use.
   flake.homeModules.apps.Qt = { pkgs, ... }: {
     home.packages = [ pkgs.kdePackages.qtdeclarative ];
   };

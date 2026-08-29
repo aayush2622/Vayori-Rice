@@ -1,6 +1,3 @@
-# Plain home-manager module fragment - underscore-prefixed so import-tree
-# skips it (it isn't a flake-parts module on its own); imported by relative
-# path from Gaming.nix instead.
 { self, pkgs, lib, config, gamesDir, ... }:
 {
   home.packages = with pkgs; [

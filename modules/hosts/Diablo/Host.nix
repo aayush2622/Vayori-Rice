@@ -81,11 +81,6 @@
             };
           };
 
-          # Grouped by category purely for readability - config.vayori.apps
-          # itself (the option every consumer actually reads) stays a flat
-          # list, flattened right here, so nothing downstream (core/Users.nix,
-          # core/PluginUpdateCheck.nix, every app's `vayoriApps` argument)
-          # needs to know these groups exist.
           vayori.apps =
             let
               appsByCategory = {
@@ -96,14 +91,10 @@
                   "DevTools"
                   "FreeClaudeCode"
 
-                  # Language apps - each installs its own LSP/toolchain and,
-                  # in turn, gates which of the editors' language-specific
-                  # extensions/plugins actually get installed. See
-                  # modules/core/DevLanguages.nix.
                   "Cpp"
                   "Rust"
                   "Kotlin"
-                  "Flutter" # Dart + Flutter, one toggle - see Flutter.nix
+                  "Flutter"
                   "Nix"
                   "Qt"
                   "Python"

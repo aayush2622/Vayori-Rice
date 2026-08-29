@@ -247,12 +247,6 @@
       /* Any custom CSS below here */
     '';
 
-    # Hand-authored against Zed's own published theme schema
-    # (https://zed.dev/schema/themes/v0.2.0.json), not ported from an
-    # existing static theme - `ThemeStyleContent` has zero required keys,
-    # so this covers the visible surface (editor, panels, terminal, git
-    # status, syntax highlighting) and lets Zed fall back to sane defaults
-    # for the ~40 keys (mostly niche UI chrome) not set here.
     zed = ''
       {
         "$schema": "https://zed.dev/schema/themes/v0.2.0.json",

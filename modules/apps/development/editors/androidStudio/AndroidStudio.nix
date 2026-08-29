@@ -1,9 +1,5 @@
 { self, inputs, lib, ... }:
 let
-  # Generic, always-installed plugins. Everything language-specific (Dart,
-  # Flutter, Kotlin Multiplatform, Nix, Python) lives in
-  # modules/apps/development/languages/*/*.nix and is pulled in below,
-  # filtered by whichever language apps are actually enabled.
   androidStudioAutoPlugins = [
     { dirName = "Catppuccin Theme"; id = "com.github.catppuccin.jetbrains"; }
     { dirName = "claude-code-jetbrains-plugin"; id = "com.anthropic.code.plugin"; }
@@ -20,10 +16,6 @@ let
     { dirName = "github-copilot-intellij"; id = "com.github.copilot"; version = "1.16.1-251"; hash = "sha256-LM2pLbOyOc2R3E90LSlbBxiGNWkzqG5pimKxvswaPQg="; }
   ];
 in {
-  # Same reasoning as Vscode.nix's pluginPins.Vscode: unfiltered by
-  # vayori.apps here (no host to filter against yet), aggregated from every
-  # language module's manualPlugins so the checker script - which only
-  # knows to look at pins.AndroidStudio by name - still sees all of them.
   flake.pluginPins.AndroidStudio = androidStudioManualPluginsSpec
     ++ (lib.concatMap (l: l.androidStudio.manualPlugins or [ ]) (lib.attrValues self.devLanguages));
 

@@ -1,6 +1,3 @@
-# Plain home-manager module fragment - see _launchers.nix for why this is
-# underscore-prefixed and imported by relative path rather than being its
-# own flake-parts module.
 { pkgs, shaderCacheDir, ... }:
 let
   gamescopeFhd = pkgs.writeShellScriptBin "gamescope-fhd" ''
