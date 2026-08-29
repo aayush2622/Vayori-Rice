@@ -6,325 +6,202 @@
 
 ## `modules/apps/development/editors/androidStudio/AndroidStudio.nix`
 
-`adb` device access works out of the box (systemd 258+ handles uaccess
-udev rules automatically) — `"adbusers"` in `extraGroups` is optional
-compatibility, not required.
+`adb` just works out of the box on a modern systemd - the `adbusers`
+group in `extraGroups` is optional belt-and-suspenders, not actually
+required anymore.
 
-Plugins and editor settings are captured as they exist on the real
-machine, pinned as Nix derivations rather than fetched live at
-activation time:
+Plugins and settings are captured exactly as they exist on the real
+machine, pinned as real Nix packages instead of fetched live every time:
 
-- **17 real user-installed JetBrains plugins** (with every language app
-  enabled, the default on this host - fewer if one is turned off), split
-  across three sources:
-  - `androidStudioAutoPlugins` (8, generic - Catppuccin Theme, the Claude
-    Code plugin, git-worktree-manager, Discord integration, lsp4ij,
-    One Dark theme, `vcs-perforce`, `vcs-svn`): resolved through
-    `inputs.nix-jetbrains-plugins.plugins.<system>."android-studio".<build>.<xmlId>`
-    (the [nix-community/nix-jetbrains-plugins](https://github.com/nix-community/nix-jetbrains-plugins)
-    input), where `<build>` is `pkgs.androidStudioPackages.stable.version`
-    read live, not hardcoded - so this only ever asks for plugins
-    compatible with the *exact* installed build, confirmed to exist as a
-    literal index key (`"2026.1.3.7"`) before relying on it. Solves what
-    used to be a real gap: manually-pinned marketplace "latest" isn't
-    necessarily compatible with the installed build at all, it's just
-    whatever's newest overall.
-  - **7 more, language-specific, sourced the same way but from
-    [DevLanguages.nix](core.md#modulescoredevlanguagesnix)**: `Flutter.nix`
-    contributes 4 (`Dart`, Flutter Enhancement Suite, `flutter-intellij`,
-    `flutter-intl` - Dart and Flutter are one language toggle here, see
-    that section), `Kotlin.nix` contributes `kmm-plugin` (Kotlin
-    Multiplatform - Android Studio's own Kotlin support is already built
-    in, this is just the one bit that isn't), `Nix.nix` contributes
-    NixIDEA, `Python.nix` contributes `python-ce`. `AndroidStudio.nix`
-    filters `self.devLanguages` down to whichever language apps are in
-    `vayori.apps` and folds each one's `androidStudio.autoPlugins` into
-    the same `allAutoPlugins` list the 8 generic ones are already in -
-    turn a language off and its plugins disappear from this list on the
-    next rebuild, nothing to edit here.
-  - `androidStudioManualPluginsSpec` (2 holdouts - `WakaTime.jar` and
-    `github-copilot-intellij`, both generic): still fetched the original
-    way, via `pkgs.fetchurl` from
-    `plugins.jetbrains.com/plugin/download?pluginId=<id>&version=<version>`
-    with a pinned content hash. WakaTime isn't in the auto index at all.
-    GitHub Copilot *is*, but its build there runs `autoPatchelf` against
-    a bundled native Node addon and fails outright - missing
-    `libsecret`/`libglib`/`libX11`/`libpipewire`/`libei`/etc, a real
-    build failure hit while migrating, not a guess - so it stays on the
-    plain `fetchurl`+`unzip` path that never touches `autoPatchelf` and
-    has always worked.
-  - `flake.pluginPins.AndroidStudio` only exposes these 2 manual
-    holdouts (plus any future language module's own `manualPlugins`,
-    though none currently has one) - the 15 auto-tracked ones don't need
-    [PluginUpdateCheck.nix](core.md#modulescorepluginupdatechecknix) watching
-    them; they update whenever the `nix-jetbrains-plugins` input does.
-  - Plugin ids and versions originally came straight from each installed
-    plugin's own `META-INF/plugin.xml`; the marketplace download
-    endpoint accepts the plugin's own XML id string directly, no numeric
-    marketplace id needed. Bundled/built-in components (e.g.
-    `marketplace`, `vcs-hg`) were excluded by cross-referencing the real
-    install's own `bundled_plugins.txt`.
-- **`pkgs.jetbrains.plugins.addPlugins` does not work here** — it assumes
-  a plain (non-FHS) IDE layout with `plugins/` nested under
-  `$out/<mainProgram>/`. `pkgs.androidStudioPackages.stable` is an
-  FHS-wrapped launcher script derivation — the real IDE lives in a
-  separate `unwrapped` derivation reached only via runtime closure, so
-  that `plugins/` path never exists inside the wrapper's own `$out` and
-  `addPlugins`' build step fails outright. Confirmed by a real failed
-  build, not assumed.
-- Instead, each plugin is placed with `home.file` directly into
-  `~/.local/share/Google/<dataDirectoryName>/<real-plugin-dir-name>` —
-  the same *user* plugins directory the IDE itself reads at startup when
-  you install a plugin through Settings → Plugins, entirely separate
-  from the read-only IDE installation. This sidesteps the FHS-wrapping
-  problem completely and needed zero changes to the stock
-  `androidStudioPackages.stable` package. Verified against the real
-  machine's own `~/.local/share/Google/AndroidStudio2026.1.2/` — every
-  directory/jar name here (`Catppuccin Theme`, `flutter-intellij`,
-  `WakaTime.jar`, etc.) matches exactly.
-- `<dataDirectoryName>` (`AndroidStudio2026.1.3`) is read out of the
-  nixpkgs-built package's own `product-info.json`, not guessed from the
-  package version string — the real machine's installed build
-  (`2026.1.2`) and the pinned nixpkgs build (`2026.1.3.7`) don't share a
-  version, and `product-info.json` is the only ground truth for which
-  config directory an IDE build actually reads.
-- The 5 XML files under `.config/Google/<dataDirectoryName>/options/`
-  (font, LAF, color scheme, One Dark config, Vim emulation) are a
-  straight transcription of the real machine's own files at that path.
-- **Matugen-driven editor color scheme** (`DankMatugen`, replacing the
-  static "One Dark" default): registers a `[templates.androidStudio]`
-  block in `vayori.matugenTemplates` — DMS's own documented custom-
-  template mechanism, assembled in
-  [Baseline.nix](desktop.md#modulesdesktopbaselinenix) — since DMS has no built-in
-  JetBrains/Android Studio matugen integration at all, this is a
-  from-scratch template. The `.icls` body itself is a shared, public
-  value (`self.matugenTemplates.androidStudio matugenSchemeName`, a
-  function of the scheme name — see
-  [Matugen.nix](desktop.md#modulesdesktopmatugennix)), not inlined here. The
-  generated `.icls` file itself is deliberately *not* declared as a
-  `home.file` — matugen writes `matugenOutputPath` itself at runtime, on
-  every wallpaper change, and home-manager would just fight it for
-  ownership of that file otherwise.
-- **`androidStudioWithFcc`**: `androidStudioPackages.stable` wrapped
-  (`pkgs.symlinkJoin` + `makeWrapper`) to `--set` the
-  [Free Claude Code](#modulesappsdevelopmentfreeclaudecodefreeclaudecodenix)
-  `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env vars on the real
-  `android-studio` binary specifically, not system-wide. Confirmed by
-  inspecting the built wrapper directly: it exports the vars then
-  `exec -a`s the real (renamed) binary, and the package's own
-  `.desktop` entry references it by bare name (`Exec=android-studio`),
-  so both the app launcher and a direct terminal launch resolve to this
-  wrapped version via `PATH` — no separate desktop-file patching
-  needed. `home.packages` uses this wrapped derivation in place of the
-  raw `androidStudioPackages.stable`.
+- **17 real plugins** (with every language toggle on, the default here -
+  fewer if you turn one off), coming from three places:
+  - 8 generic ones (Catppuccin, the Claude Code plugin, git-worktree-
+    manager, Discord integration, lsp4ij, One Dark theme, Perforce/SVN
+    support) resolved against the *exact* installed IDE build, read
+    live rather than hardcoded - so this only ever asks for plugins
+    that actually match the version installed, closing a real gap
+    where "latest on the marketplace" isn't necessarily compatible with
+    what's actually running.
+  - 7 more, language-specific, coming from each enabled language's own
+    module: Flutter contributes 4 (Dart itself plus three Flutter
+    plugins - Dart and Flutter share one toggle, see the languages
+    section), Kotlin contributes the Kotlin Multiplatform plugin
+    (regular Kotlin support is already built into the IDE), Nix
+    contributes NixIDEA, Python contributes the Python plugin. Turn a
+    language off and its plugins just disappear from this list on the
+    next rebuild - nothing to edit by hand.
+  - 2 manual holdouts (WakaTime, GitHub Copilot) still fetched the old
+    way, with a pinned hash. WakaTime just isn't in the automated index.
+    GitHub Copilot *is* there, but building it that way genuinely fails
+    - it bundles a native Node addon that the build step can't patch up
+    correctly, missing half a dozen shared libraries. Hit that as a real
+    build failure while migrating everything else, not a hypothetical -
+    so it stays on the plain fetch-and-unzip path that's always worked.
+  - Only those 2 manual ones show up in the update-checker's watch list;
+    the other 15 update automatically whenever the plugin-index input
+    does.
+- **The normal "add plugins" nixpkgs helper doesn't work here.** It
+  assumes a plain IDE layout, and Android Studio's package is an
+  FHS-wrapped launcher where the real IDE lives in a separate closure -
+  the path that helper expects just doesn't exist. Confirmed with an
+  actual failed build, not assumed. Instead, each plugin gets placed
+  directly into the *user* plugins folder - the same one the IDE itself
+  writes to when you install something through its own Settings menu -
+  which sidesteps the wrapping problem completely and needed zero
+  changes to the stock package. Checked every plugin folder name against
+  the real machine's own install and they match exactly.
+- The IDE's actual config-directory name gets read out of the built
+  package's own metadata, not guessed from a version string - the real
+  machine's installed build and the one pinned here don't share a
+  version number, and that metadata file is the only reliable source of
+  truth for which folder an IDE build actually reads from.
+- Five XML option files (font, look-and-feel, color scheme, One Dark
+  config, Vim emulation) are straight transcriptions of the real
+  machine's own files.
+- **The editor gets a real matugen-driven color scheme**, replacing the
+  static default - since neither DMS nor Android Studio has any built-in
+  hookup for this, it's a from-scratch template (see
+  [Matugen.nix](desktop.md#modulesdesktopmatugennix)). The generated
+  scheme file deliberately isn't declared as a normal managed file -
+  matugen writes it directly on every wallpaper change, and letting
+  home-manager also claim ownership would just mean the two fight over
+  the same file.
+- **The Free Claude Code wrapper** takes the real Android Studio binary
+  and wraps it (`symlinkJoin` + `makeWrapper`) to set FCC's environment
+  variables on that process specifically, not system-wide. Checked the
+  built wrapper directly: it sets the vars, then execs the real binary
+  under its original name, and the app's own `.desktop` entry references
+  it by that same bare name - so both the app launcher and a plain
+  terminal launch resolve to the wrapped version automatically, no
+  desktop-file patching needed.
 
 ---
 
 ## `modules/apps/development/editors/vscode/Vscode.nix`
 
-`programs.vscode.profiles.default` (`userSettings`, `keybindings`,
-`extensions`), the current home-manager schema — not the older flat
-`programs.vscode.userSettings` shape. Settings, the one custom
-keybinding (`ctrl+y` unbound from `editor.action.deleteLines`), and every
-extension are a direct transcription of the real `~/.config/Code/User/`
-on this machine, not a live importer - but as of
-[DevLanguages.nix](core.md#modulescoredevlanguagesnix), split between generic
-ones declared right here and language-specific ones this file only
-aggregates:
+Settings, one custom keybinding, and every extension are a direct
+transcription of the real config on this machine, not a live importer -
+split, as of the per-language system, between generic stuff declared
+right here and language-specific stuff this file only pulls in:
 
-- `nixpkgsExtensions`/`vscodeAutoExtensions` here are the **generic**
-  ones only - nothing tied to a specific language. `nixpkgsExtensions`:
-  pre-packaged in `pkgs.vscode-extensions`. `vscodeAutoExtensions`:
-  resolved through `pkgs.vscode-marketplace.<publisher>.<name>`, the
-  overlay from the
-  [nix-community/nix-vscode-extensions](https://github.com/nix-community/nix-vscode-extensions)
-  input (`nixpkgs.overlays` in
-  [Host.nix](core.md#moduleshostsnamehostnix)) - daily-refreshed, no hash to
-  compute by hand; its tracked "latest" can lag the true Marketplace
-  latest by a version, since it's a daily heuristic scrape, not strict
-  semver - a real but minor tradeoff against never having a hash to bump
-  manually again.
-- **Every language-specific extension lives in
-  `modules/apps/development/languages/*/*.nix` instead** (C/C++'s
-  `cpptools`, Rust's `rust-analyzer`, Kotlin's `fwcd.kotlin` +
-  `mathiasfrohlich.kotlin` + Gradle support, Dart's and Flutter's own
-  extensions, Nix's `nix-ide` + `nix-forge`, Qt's `qt-core`/`qt-qml`,
-  Python's `ms-python.*` + Pylance).
-  This file's home-manager module filters `self.devLanguages` down to
-  whichever language apps are actually in `vayori.apps`
-  (`enabledLanguages`), then folds each one's `vscode.nixpkgsExtensions`/
-  `.marketplaceExtensions`/`.manualExtensions`/`.settings` into its own
-  lists/`vscodeSettings` before building `programs.vscode`. A
-  `nixpkgsExtensions` entry here is a dotted string
-  (`"rust-lang.rust-analyzer"`) rather than a direct `pkgs.vscode-
-  extensions.rust-lang.rust-analyzer` reference, resolved via
-  `lib.attrByPath (lib.splitString "." dotted) (throw "...")
-  pkgs.vscode-extensions` - language modules don't have `pkgs` in scope
-  when they publish this data (flake-level, evaluated once, not per
-  system), only this file's own per-system module does.
-- The one remaining manual (fetchurl-pinned) extension -
-  `boundarystudio.cpp-extentions-pack` - moved with the rest of C/C++'s
-  extensions into `Cpp.nix`'s `flake.devLanguages.Cpp.vscode
-  .manualExtensions`, not in this file's own `let` anymore. It's still
-  not on the nix-vscode-extensions index (checked, not assumed), so it
-  stays on the original mechanism -
-  `pkgs.vscode-utils.extensionsFromVscodeMarketplace`, pinned to
-  `{ name, publisher, version, hash }` with a content hash from `nix
-  store prefetch-file` against the Marketplace's VSIX asset URL. This
-  file aggregates every enabled language's `manualExtensions` back into
-  `flake.pluginPins.Vscode` itself (see the note in
-  [PluginUpdateCheck.nix](core.md#modulescorepluginupdatechecknix) for why it
-  has to stay under this one key rather than a per-language one) - so
-  it's still the only one exposed there today; every
-  nix-vscode-extensions-sourced one doesn't need
-  [PluginUpdateCheck.nix](core.md#modulescorepluginupdatechecknix) to watch it
-  at all.
+- The generic extension lists here are exactly that: nothing tied to any
+  one language. Some come pre-packaged in nixpkgs directly; others
+  resolve through a community-maintained marketplace overlay that
+  refreshes daily, so there's no hash to compute by hand for those - the
+  trade-off being its idea of "latest" can lag the real marketplace by a
+  version or two, since it's a heuristic scrape, not strict semver
+  tracking. Worth it to never touch a hash again.
+- **Every language-specific extension lives in its own language module
+  instead** - C/C++'s tooling, Rust's analyzer, Kotlin's extensions plus
+  Gradle support, Dart/Flutter's extensions, Nix's tooling, Qt's
+  extensions, Python's stack. This file just filters the published
+  language data down to whatever's actually enabled and folds it in.
+  Extension names from nixpkgs come through as plain dotted strings
+  rather than direct package references, since language modules don't
+  have package access at the point they publish this data - the string
+  gets resolved right here instead, and a typo throws loudly rather than
+  silently installing nothing.
+- The one remaining manually-pinned extension (a small C++ pack not on
+  the automated index) moved into the Cpp language module along with
+  everything else C/C++-related, and this file aggregates every enabled
+  language's manual pins back into one shared list for the update
+  checker to watch.
 
-VSCode itself moved out of `DevTools.nix` into its own module once it
-needed this much dedicated configuration — `DevTools.nix` keeps only
-`gh`, `lazygit`, `docker-compose`.
+VS Code itself used to live inside the generic dev-tools file, before it
+grew enough config to earn its own module.
 
-- **The DMS theme extension (`DankLinux.dms-theme`) is installed as a
-  real, writable copy via `home.activation`, not through
-  `programs.vscode.profiles.default.extensions`**: DMS bundles this vsix
-  itself (`matugenTemplateVscode = true`, in
-  [Dms.nix](desktop.md#modulesdesktopdmsnix)) and rewrites its `themes/*.json` on
-  every wallpaper change (`appendVSCodeConfig` in
-  `core/internal/matugen/matugen.go` writes straight into the installed
-  extension's own directory) — but DMS never installs the vsix itself,
-  only keeps an already-installed copy's theme files updated
-  (`checkVSCodeExtension` there is purely a detection/UI check, confirmed
-  by reading the source). The standard `extensions` list can't be used
-  for it either: that symlinks straight into the read-only `/nix/store`,
-  so matugen's writes would fail — hence the real copy instead, version
-  tracked against DMS's own `vsix-build/package.json`.
-- **The installed directory name must be lowercase
-  `danklinux.dms-theme-<version>`**, even though the vsix's own
-  `package.json` declares `"publisher": "DankLinux"` —
-  `appendVSCodeConfig` globs for `extBaseDir/danklinux.dms-theme-*`
-  verbatim (matching VSCode's own real `code --install-extension`
-  convention of lowercasing the publisher for the on-disk id). Confirmed
-  by booting this in a real VM: the capitalized version silently never
-  matched, so matugen's write never actually ran — the theme file just
-  held the vsix's own static bundled default the whole time, not a
-  live-updated one.
-- **One Dark syntax highlighting, layered on top of the matugen theme,
-  not switched to instead of it**: `workbench.colorTheme` stays
-  `"Dynamic Base16 DankShell"` (the matugen-driven theme above) - the
-  general UI (sidebar, tabs, status bar, ...) keeps following the
-  current wallpaper. `editor.tokenColorCustomizations.textMateRules`
-  and `editor.semanticTokenColorCustomizations` are VS Code's
-  documented mechanism for overriding *just* syntax highlighting on top
-  of whatever theme is active, regardless of which one - so both are
-  set to the real `tokenColors`/`semanticTokenColors` read directly out
-  of the already-packaged `mskelton.one-dark-theme` extension's own
-  `themes/one-dark.json` (not hand-picked or approximated), giving real
-  One Dark syntax colors while the rest of the editor still tracks
-  matugen. The pre-existing italic-comment rule is kept alongside One
-  Dark's own (non-italic) comment color rule for the same scope - VS
-  Code merges multiple rules matching the same scope rather than the
-  later one replacing the earlier one outright, so comments end up both
-  colored and italic, matching original intent plus the added color.
+- **The DMS theme extension gets installed as a real, writable copy**
+  through an activation script, not the normal extensions list. DMS
+  bundles this extension itself and rewrites its theme files live on
+  every wallpaper change, but the normal extensions mechanism symlinks
+  straight into the read-only Nix store - which would make DMS's writes
+  fail outright. Hence the real copy instead.
+- **The installed folder name has to be all-lowercase**, even though the
+  extension's own metadata declares a capitalized publisher name - DMS's
+  own code globs for the lowercase form specifically, matching how VS
+  Code itself lowercases publisher names on disk. Found this the hard
+  way in a real VM: the capitalized version just silently never matched,
+  so the theme file sat there holding its static bundled default
+  forever, never actually updating.
+- **One Dark syntax highlighting sits on top of the matugen theme,
+  rather than replacing it.** The overall UI theme stays matugen-driven,
+  tracking the current wallpaper; a separate, VS Code-documented
+  mechanism overrides just the syntax colors on top of whatever theme is
+  active, using the real color values pulled straight out of the
+  packaged One Dark extension. A pre-existing italic-comment rule sticks
+  around alongside it - VS Code merges multiple rules for the same
+  scope instead of letting the later one win outright, so comments end
+  up both colored *and* italic, matching the original intent plus the
+  added color.
 
 ---
 
 ## `modules/apps/development/editors/zed/Zed.nix`
 
-`programs.zed-editor` (home-manager's native module) — `extensions` and
-`userSettings`, a direct transcription of the real `~/.config/zed/` on
-this machine (both the installed-extensions list and `settings.json`),
-split generic-vs-language-specific the same way as
-[Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix), one commit
-after Vscode/AndroidStudio had already gone through this split - so this
-file only ever had to *aggregate*
-[DevLanguages.nix](core.md#modulescoredevlanguagesnix) contributions, never carry
-language-specific settings of its own to begin with.
+Home-manager's own native Zed module - extensions and settings, a direct
+transcription of the real config on this machine, split the same
+generic-vs-language way as VS Code. This file only ever had to
+*aggregate* language contributions; it never carried any language-
+specific settings of its own to begin with.
 
-- **Extensions are just names, not files or hashes** — unlike VS Code's
-  marketplace extensions (fetched and pinned as Nix derivations) or
-  Android Studio's plugins (same), `programs.zed-editor.extensions`
-  becomes Zed's own `auto_install_extensions` setting, and Zed resolves
-  and downloads each one itself at its *own* next startup. Nix's only
-  job here is writing the list of names - there's nothing to pin, hash,
-  or feed to [PluginUpdateCheck.nix](core.md#modulescorepluginupdatechecknix)
-  (see the note in that section for why Zed isn't one of the three
-  editors it watches).
-- **`mutableUserSettings` is left at its default (`true`)** — Zed's
-  activation script merges this file's declared settings on top of
-  whatever's already in `~/.config/zed/settings.json` (`jq '$dynamic *
-  $static'`, confirmed by reading the real generated activation script)
-  rather than replacing the file outright the way VSCode's `force`-style
-  writes do. Declared settings still win on every rebuild; the file just
-  stays a normal editable file in between, matching how Zed itself
-  expects to be able to write to it (e.g. from its own settings UI).
-- **The real `~/.config/zed/settings.json`'s WakaTime API key is
-  deliberately NOT in this file** — `lsp.wakatime.initialization_options
-  .api-key` held a live, real key in the source config; committing it
-  here would mean shipping a real credential in a public git repo. Left
-  out entirely rather than pinned/redacted, with a comment at the
-  omission site pointing at the two real alternatives (set it locally
-  through Zed's own settings, or wire it through a proper secrets
-  mechanism like sops-nix/agenix if it needs to be declarative).
-- **`ui_font_family`/`buffer_font_family` use `vayoriTheme.font`**, not
-  the real config's literal `"JetBrains Mono"` — same reasoning as
-  [Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix)'s
-  `editor.fontFamily`: every app's font should track the one shared
-  `vayori.theme.font` setting, not carry its own independent copy of the
-  font name that'd drift the next time that setting changes.
-- **Kotlin's Zed contribution pulls in `java` and `groovy` alongside
-  `kotlin`** — real Kotlin/Android projects mix in Java interop files and
-  Groovy Gradle build scripts often enough that gating them independently
-  would just mean two more toggles that are, in practice, always flipped
-  together with Kotlin. Its settings block
-  (`lsp.kotlin-language-server.settings.compiler.jvm.target`,
-  `languages.Kotlin.language_servers`) is the one real case where
-  [DevLanguages.nix](core.md#modulescoredevlanguagesnix)'s note about
-  `lib.recursiveUpdate` vs. `//` matters in practice today.
-- **`Cpp`'s only Zed extension is `neocmake`** — Zed ships C/C++ (clangd)
-  support natively, so unlike VSCode there's no `cpptools`-equivalent
-  extension to install; CMake project-file support is the one real gap
-  it fills in.
-- **`Rust` and `Python` have no Zed extension at all** — same reasoning
-  as C/C++: Zed bundles both natively (rust-analyzer, and a Pyright-based
-  Python language server). `flake.devLanguages.Rust`/`.Python` simply have
-  no `zed` key, and `Zed.nix`'s `l.zed or { }` handles that the same way
-  it handles any other language not contributing a `zed` block.
-- **`arduino` was in the real installed-extensions list but is dropped
-  here on request** — along with the `lsp.arduino-language-server`
-  settings block it needed, since nothing here actually uses it.
-- **Zed gets a real matugen-driven theme, not a static one** — the real
-  config's `{mode: "system", light: "Ayu Light", dark: "One Dark Pro
-  Night Flat"}` becomes a single `theme = "Matugen"` string instead (see
-  `vayori.matugenTemplates.zed`, registered right below
-  `programs.zed-editor` in this file, output to
-  `~/.config/zed/themes/matugen.json`). The template itself is
-  [Matugen.nix](desktop.md#modulesdesktopmatugennix)'s `zed` entry - unlike every
-  other app's matugen template here, it wasn't ported from an existing
-  static theme or community source; it's hand-authored directly against
-  Zed's own published theme schema
-  (`https://zed.dev/schema/themes/v0.2.0.json`, fetched and checked
-  against, not guessed at) since `ThemeStyleContent` there has zero
-  required keys - it sets the ~140 keys that cover the visible surface
-  (editor, panels, terminal, git status colors, 19 syntax-highlighting
-  scopes) and lets Zed fall back to its own defaults for the rest.
-  Verified by rendering the actual built template with dummy colors
-  substituted for every `{{ }}` placeholder and checking the result is
-  valid JSON with every key present in the real schema's property list -
-  not something a GUI app running headless could otherwise be confirmed
-  against in this environment.
+- **Extensions here are just names, nothing more** - unlike VS Code's
+  pinned marketplace packages or Android Studio's fetched plugins, Zed
+  just resolves and installs each named extension itself at its own next
+  startup. Nothing to pin or hash, and nothing for the update checker to
+  watch either - there's no version pinned anywhere to go stale.
+- **Settings stay mutable on purpose.** Zed's activation script merges
+  this file's declared settings on top of whatever's already sitting in
+  the real settings file, rather than replacing it outright - so
+  declared settings still win every rebuild, but the file stays normal
+  and editable in between, the way Zed itself expects to be able to
+  write to it from its own UI.
+- **The real config's WakaTime API key is deliberately not in this
+  file.** It was a live, real key in the source config, and this repo is
+  public - shipping it would mean leaking a real credential. Left out
+  entirely rather than redacted-in-place; set it locally through Zed's
+  own settings, or wire it through a real secrets manager if it needs to
+  be declarative.
+- Fonts here track the one shared theme font setting, not a hardcoded
+  copy of whatever the real config happened to say - same reasoning as
+  every other themed app in this repo.
+- **Kotlin's Zed setup pulls in Java and Groovy too** - real Kotlin/
+  Android projects mix in Java interop files and Groovy build scripts
+  often enough that gating them separately would just mean two more
+  toggles that always get flipped on together with Kotlin anyway.
+- **C/C++ only needs one extra extension here** - Zed bundles clangd
+  support natively, unlike VS Code, so the only real gap is CMake
+  project-file support.
+- **Rust and Python need no Zed extension at all** - same story, Zed
+  bundles both natively (rust-analyzer, and a Pyright-based Python
+  server).
+- **Arduino was in the real installed-extensions list but got dropped
+  here on request**, along with the settings block it needed, since
+  nothing here actually uses it.
+- **Zed gets a real matugen-driven theme, not the static light/dark pair
+  the real config used.** The theme template was hand-authored directly
+  against Zed's own published theme schema - not ported from an existing
+  theme, since none of the community ones matched this repo's palette
+  anyway. It sets around 140 style keys covering the visible surface
+  (editor, panels, terminal, git status colors, syntax highlighting) and
+  lets Zed fall back to its own defaults for the rest, since none of them
+  are actually required by the schema. Checked this by rendering the
+  real built template with placeholder colors substituted in and
+  confirming the result is valid JSON with every key matching the real
+  schema - about as close to "actually testing it" as this environment
+  allows for a GUI app with no display attached.
 
 ---
 
 ## `modules/apps/development/languages/*/*.nix`
 
-Seven independent `vayori.apps` toggles, each installing one language's own
-LSP/toolchain and telling the editors above what to install for it - see
-[DevLanguages.nix](core.md#modulescoredevlanguagesnix) for the mechanism. All
-seven are enabled on this host today - confirmed with a real build, not
-just individually: every one flipped off *at once*, rebuilt, and each
-editor's extension/plugin list dropped to exactly its generic set (VSCode
-50→21, Android Studio 17→10, Zed 16→8) with zero language packages left
-on `$PATH`, then flipped back on and rebuilt clean again.
+Seven independent toggles, each installing one language's own tooling
+and telling the three editors above what to install for it. All seven
+are on by default here - and this was actually checked as a group, not
+just individually: flip all seven off at once, rebuild, and every
+editor's extension list should drop to exactly its generic baseline with
+zero language packages left anywhere on `$PATH`. That's exactly what
+happened (VS Code 50→21, Android Studio 17→10, Zed 16→8), then flipping
+them back on rebuilt clean again.
 
 | App | Packages | VSCode extension(s) | Android Studio | Zed |
 | --- | --- | --- | --- | --- |
@@ -336,232 +213,142 @@ on `$PATH`, then flipped back on and rebuilt clean again.
 | `Qt` | `kdePackages.qtdeclarative` (qmlls) | `theqtcompany.qt-core`/`qt-qml` (marketplace) | - | `qml` |
 | `Python` | `python3` | `ms-python.python`/`vscode-pylance`/`debugpy`/`vscode-python-envs` + `kevinrose.vsc-python-indent`/`njqdev.vscode-python-typehint` (marketplace) | `python-ce` | - (bundled) |
 
-- **`fwcd.kotlin` is a marketplace extension, not a `pkgs.vscode-
-  extensions` one** - nixpkgs' own curated set only has
-  `mathiasfrohlich`'s Kotlin extension. Caught by the `throw` in
-  `Vscode.nix`'s dotted-string resolver failing a real build - not
-  something documentation or a search would have surfaced, since
-  `mathiasfrohlich.kotlin` (a similarly-named, actually-present
-  extension) made the mistake easy to make.
-- **`Flutter` is Dart too - one toggle, not two** - see the note in
-  [Zed.nix](#modulesappsdevelopmenteditorszedzednix)'s section above for
-  the two real reasons (bundled SDK, always used together in practice).
-  A real build failure surfaced a second, sharper reason while these were
-  still separate modules: `pkgs.dart` and `pkgs.flutter` both ship a
-  top-level `version` file, and having both in the same `home.packages`
-  broke `home-manager`'s `buildEnv` outright (`pkgs.buildEnv error: two
-  given paths contain a conflicting subpath`) - not a style preference,
-  a genuine conflict that merging them into one toggle sidesteps
-  entirely rather than working around.
-- **`Cpp` and `C` are one toggle, not two** - there's no extension or
-  language-server story in this repo that treats plain C differently
-  from C++ (`cpptools`, `clangd`, and `clang-format` all handle both), so
-  splitting them would just be two toggles that always get enabled
-  together in practice.
-- **`Python`'s only real package is the interpreter itself** - Pylance
-  (VSCode), `python-ce` (Android Studio), and Zed's own bundled Pyright
-  all do their own analysis without a separate LSP binary on `$PATH`, so
-  `pkgs.python3` is the one thing actually missing without this toggle.
-  `github.copilot.enable.python = false` in `Vscode.nix`'s generic
-  settings is left alone regardless - it's Copilot config, not gated on
-  any extension actually being installed (Copilot itself isn't, see that
-  section), same as its `cpp`/`html`/`css`/etc. siblings.
-- **`pkgs.python314` already shows up on `$PATH` even with `Python`
-  disabled** - not a bug in this toggle, confirmed while negative-testing
-  it: [FreeClaudeCode.nix](#modulesappsdevelopmentfreeclaudecodefreeclaudecodenix)
-  installs it unconditionally for its own `uv sync` setup step, entirely
-  independent of this language toggle. Both can be true at once - `Python`
-  off still means no Pylance/`python-ce`/Python-specific settings in any
-  editor, it just doesn't mean "no Python interpreter anywhere on this
-  machine" as long as FreeClaudeCode is also enabled.
-- **`Nix.nix`'s `nil`/`nixfmt` packages overlap with `Host.nix`'s
-  system-wide `environment.systemPackages`** (installed there for
-  root/system-level editing, independent of any user's `vayori.apps`) -
-  deliberately left as-is rather than deduplicated, since the Nix store
-  dedups the actual derivation either way and the two lists serve
-  different scopes (system vs. per-user).
+- **`fwcd.kotlin` turned out to only exist on the marketplace, not in
+  nixpkgs' own curated set** - only a similarly-named extension from a
+  different publisher is actually pre-packaged there. Caught this
+  because the resolver throws loudly on a bad reference instead of
+  silently doing nothing - it failed a real build, which is exactly the
+  point of making it throw.
+- **Flutter covers Dart too - one toggle, not two.** The Flutter package
+  already bundles its own Dart SDK, and every real Dart project on this
+  machine is a Flutter one anyway. There's also a sharper, more concrete
+  reason: while these were still separate modules, having both installed
+  broke `home-manager`'s build outright, since both packages ship a
+  file at the same internal path and can't coexist in one profile. Not
+  a style call - a real conflict that merging them sidesteps completely.
+- **C and C++ are one toggle, not two** - nothing in this setup treats
+  plain C differently from C++, so splitting them would just be two
+  toggles that always get flipped on together anyway.
+- **Python's only real package is the interpreter itself** - the
+  language servers on all three editors do their own thing without
+  needing a separate binary, so the interpreter is the one thing
+  actually missing without this toggle.
+- **A Python interpreter shows up on `$PATH` even with this toggle
+  off** - not a bug, checked this directly while testing the toggle:
+  Free Claude Code installs its own Python unconditionally for its setup
+  step, completely unrelated to this language toggle. Both things can be
+  true: no Python-specific editor extensions without the toggle, but
+  still a Python binary around if Free Claude Code is also enabled.
+- Nix's own packages overlap with what's already installed system-wide
+  for root-level editing - left as-is on purpose, since the Nix store
+  dedups the actual files regardless and the two lists serve genuinely
+  different scopes.
 
 ---
 
 ## `modules/apps/development/devTools/DevTools.nix`
 
-`git` isn't listed here — it's already in `environment.systemPackages`
-(`Host.nix`), since flakes need it system-wide regardless of which apps
-are picked.
+`git` isn't listed here - it's already installed system-wide, since
+flakes need it available regardless of which apps anyone's picked.
 
 ---
 
 ## `modules/apps/development/freeClaudeCode/FreeClaudeCode.nix`
 
 Wires [Free Claude Code](https://github.com/Alishahryar1/free-claude-code)
-(FCC) — a local proxy that lets Claude Code's CLI/extensions talk to
-non-Anthropic model providers (NVIDIA NIM by default, matching upstream's
-own documented Quick Start) instead of Anthropic's API — into the CLI,
-the already-installed VS Code extension
-([Vscode.nix](#modulesappsdevelopmenteditorsvscodevscodenix)), and Android Studio's
-already-installed plugin
-([AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)).
+(FCC) - a local proxy that lets Claude Code talk to non-Anthropic model
+providers instead of the paid API - into the CLI, the VS Code extension,
+and Android Studio's plugin.
 
-- **Not a from-scratch Nix derivation, deliberately**: FCC requires
-  Python 3.14+ and pulls in ~20 dependencies (several, like `httpx2` and
-  `nvidia-riva-client`, aren't packaged in nixpkgs), and moves fast
-  enough that hash-pinning the whole closure would need constant
-  upkeep. Instead: `pkgs.uv` is installed declaratively, and the actual
-  `git clone`/`uv sync` work happens in its own
-  `systemd.user.services.free-claude-code-bootstrap` (`Type = "oneshot"`) —
-  `uv` manages the Python interpreter itself, nothing extra needed in
-  `home.packages` for that. Same trade-off already made for Zen
-  Browser's mods/profile fetch
-  ([ZenBrowser.nix](apps-utils.md#modulesappsutilszenbrowserzenbrowsernix)) — a real
-  network dependency for something too fast-moving to fully pin, not
-  the norm elsewhere in this repo.
-- **The bootstrap unit is deliberately *not* run inline in
-  `home.activation`** — it was, originally, and that was a real bug:
-  `uv sync` downloading Python 3.14 plus ~20 packages ran synchronously
-  inside `home-manager-ash.service` itself, so the entire rebuild
-  blocked on it (and, on a slow link, could run past home-manager's own
-  default 5-minute activation timeout and kill the *whole* activation,
-  not just this one app). Confirmed live: `home-manager-ash.service`
-  hit exactly that "Read-only file system"-adjacent failure mode in
-  testing. Fixed by moving the heavy work to
-  `free-claude-code-bootstrap.service` and having
-  `home.activation.freeClaudeCodeSetup` only kick it off with
-  `systemctl --user --no-block restart free-claude-code.service` —
-  activation returns immediately regardless of how long the clone/sync
-  takes. `free-claude-code.service` declares
-  `Wants`/`After = free-claude-code-bootstrap.service`, so starting the
-  server always waits for a real, finished sync first, whether that
-  start comes from activation's non-blocking kick or from
-  `WantedBy = default.target` on a later login.
-- **`fcc-server` runs as a `systemd.user` service**
-  (`free-claude-code.service`, `WantedBy = [ "default.target" ]`), not
-  launched manually — `ExecStart` points straight at the venv `uv sync`
-  creates (`.venv/bin/fcc-server` inside the cloned repo).
-  `Restart = "on-failure"` / `RestartSec = 10` / a 20-attempt,
-  5-minute `StartLimit` window are deliberately generous — a leftover
-  safety net from before the bootstrap split, kept because it's cheap
-  insurance against any future slow first start.
-- **`core/Users.nix`'s `home-manager-<name>.service` gets
-  `TimeoutStartSec = lib.mkForce "30sec"`** — home-manager's own module
-  defaults this to 5 minutes; it was first bumped up to `"10min"` here
-  as a general safety margin for any slow synchronous activation step
-  (Papirus's icon copy on a slow filesystem, say), then tightened back
-  down to `"30sec"`. A live VM test of that `"30sec"` value showed
-  activation getting killed by `Result: timeout` around 24 seconds in,
-  before several steps (including ZenBrowser's) even ran - so on a slow
-  first activation this value can genuinely cut work off short. Worth
-  revisiting if a rebuild ever ends with a `home-manager-<name>.service`
-  timeout in the logs.
-- **`~/.fcc/.env` is seeded once, never overwritten** — confirmed
-  against FCC's own source (`config/paths.py`, `managed_env_path()`)
-  that this exact path, not the cloned repo's own `.env`, is what the
-  running server actually reads its live config from and what its
-  Admin UI writes provider keys back into. Force-declaring this file
-  the way Vesktop's settings are would fight the Admin UI for ownership
-  and wipe out a pasted-in API key on every rebuild, so it's only
-  written if absent (`[ -f ... ] || cp ...`), same idempotent-seed
-  pattern as Baseline.nix's Papirus icon copy. The seed sets
-  `MODEL`/`PROXY_AUTH_ENABLED`/`ANTHROPIC_AUTH_TOKEN`/
-  `FCC_OPEN_BROWSER=false` (no point popping a browser tab from a
-  background service) and leaves `NVIDIA_NIM_API_KEY` commented out —
-  getting one is a manual step by necessity (an API key can't be
-  generated by this repo, and wouldn't belong committed to it even if
-  it could) — build one free at
-  [build.nvidia.com/settings/api-keys](https://build.nvidia.com/settings/api-keys)
-  and either paste it into that line or set it through FCC's own Admin
-  UI. Any other provider `.env.example` documents works too; NVIDIA NIM
-  is just upstream's own default, not a hardcoded requirement.
-- **`~/.claude.json`'s `hasCompletedOnboarding: true`**: documented by
-  upstream as the fix for Claude Code still prompting a real Anthropic
-  login even after the FCC URL/token are set. Merged in via `jq`, not a
-  plain `home.file`, because this file is Claude Code's own real state
-  (auth, project history) — a full overwrite would either destroy that
-  or fight the CLI for ownership of a file it writes to constantly.
-  Idempotent either way: creates `{}` first if the file doesn't exist
-  yet, then merges the one key in on every rebuild without touching
-  anything else already there.
-- **`~/.jetbrains/acp.json`**: same reasoning, `jq`-merged rather than
-  declared — this is JetBrains' own IDE-wide registry of external ACP
-  (Agent Client Protocol) agents, potentially listing other agents
-  entirely unrelated to Claude. The merge only ever touches
-  `.acp.registry."claude-acp".env`, additively (`(existing // {}) +
-  new`), so it can't clobber another registered agent or wipe fields
-  the IDE itself puts on this same entry when Claude ACP is first
-  enabled. Verified this merge behaves correctly both against an empty
-  file and one with unrelated pre-existing content, not just assumed.
-- **The JetBrains ACP registry patch here targets JetBrains' generic ACP
-  mechanism, not necessarily the already-installed
-  `com.anthropic.code.plugin` itself** (Anthropic's own dedicated
-  JetBrains plugin) — upstream's README only documents the ACP path for
-  JetBrains IDEs, and whether that dedicated plugin *also* reads the
-  same `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env vars from ACP's
-  registry is genuinely unverified. Android Studio itself is covered a
-  different, more direct way instead - see below.
-- **`androidStudioWithFcc`** (in
-  [AndroidStudio.nix](#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)): the
-  real fix for Android Studio specifically. `pkgs.symlinkJoin` +
-  `makeWrapper` wraps the real `android-studio` binary, `--set`-ing the
-  same FCC env vars VS Code's extension gets, scoped to Android Studio's
-  own process tree only - the `.desktop` entry references the binary by
-  bare name (`Exec=android-studio`), so both the app launcher and a
-  direct terminal invocation resolve to the wrapped version via `PATH`,
-  confirmed by inspecting the built wrapper script directly. This is
-  more reliable than the ACP patch above: whatever the Claude Code
-  JetBrains plugin spawns as a subprocess inherits Android Studio's own
-  process environment by plain OS process inheritance, regardless of
-  which specific mechanism the plugin uses internally to read its
-  config - no dependency on ACP being the right registration point at
-  all.
-- **Deliberately not wired system-wide**: `ANTHROPIC_BASE_URL`/
-  `ANTHROPIC_AUTH_TOKEN` are set only inside VS Code's own
-  `claudeCode.environmentVariables`, the JetBrains ACP registry, and now
-  Android Studio's own wrapped binary - never as a `home.sessionVariables`
-  entry. Doing that would redirect *every* terminal's `claude` invocation
-  through FCC too, silently breaking real authenticated Claude Code CLI
-  usage anywhere else it's used. `fcc-claude` (FCC's own launcher, installed alongside
-  `fcc-server`) is the deliberate opt-in path for terminal use instead
-  — it sets these env vars only for itself, leaving the real `claude`
-  binary untouched.
-- **Only Claude Code is wired up** — FCC's own installer also offers
-  Codex, Pi, OpenCode, Cline, Hermes, DeepSeek Harness, Grok, Muse, and
-  Aider, each with their own third-party installer script it'd run by
-  default. None of that runs here; only `fcc-server`'s own dependencies
-  get installed.
-- **The connection info (`baseUrl`, `authToken`, and the full client env
-  var set) is published once as `flake.freeClaudeCode`**, not
-  hardcoded separately in this file, `Vscode.nix`, and
-  `AndroidStudio.nix` — it used to be, three copies of the same
-  `localhost:8082`/`"freecc"` pair. Real bug that shape had: removing
-  `"FreeClaudeCode"` from `vayori.apps` left VS Code's
-  `claudeCode.environmentVariables` and Android Studio's wrapped binary
-  still pointing at a proxy that was never started - no build error,
-  just a Claude Code integration that silently tries to talk to a dead
-  `localhost:8082` instead of falling back to the real Anthropic API.
-  Fixed two ways together: the constants moved to one place
-  (`self.freeClaudeCode`, same public-data pattern as
-  `flake.matugenTemplates`/`flake.pluginPins`), and both consumers now
-  gate the FCC-specific settings behind `builtins.elem "FreeClaudeCode"
-  vayoriApps` - VS Code drops `claudeCode.environmentVariables`/
-  `disableLoginPrompt` entirely (keeping `claudeCode.preferredLocation`,
-  which doesn't depend on FCC) and Android Studio falls back to the
-  plain unwrapped `androidStudioPackages.stable` package. `vayoriApps`
-  is `config.vayori.apps` from the NixOS-level option, threaded into
-  home-manager via `home-manager.extraSpecialArgs` in
-  [core/Users.nix](core.md#modulescoreusersnix) - the same plumbing any other
-  app can use to react to which sibling apps are actually enabled.
-  Verified both ways: built the toplevel/activation packages with FCC
-  enabled (identical output to before), then evaluated again with
-  `"FreeClaudeCode"` and `"ZenBrowser"` stripped from `vayori.apps` and
-  confirmed `claudeCode.environmentVariables` disappears from VS Code's
-  settings and the Android Studio package resolves to the plain
-  `android-studio-*` derivation, not the FCC-wrapped one.
-- **`AndroidStudio.nix`'s `CHROME_EXECUTABLE = "zen"` has the same
-  fix, same reason**: it only gets set when `"ZenBrowser"` is actually
-  in `vayori.apps` (`lib.optionalAttrs`), since it names a binary that
-  doesn't exist otherwise. A repo-wide scan for this pattern (any app
-  module hardcoding another app's binary name, URL, or port) turned up
-  exactly these two couplings - Zen's own `zenExtensions` list has a
-  "Bitwarden Password Manager" entry too, but that's a *browser
-  add-on* pinned inside `ZenBrowser.nix` itself, unrelated to the
-  separate standalone `Bitwarden.nix` app; not a real coupling.
-
+- **Deliberately not a from-scratch Nix package.** FCC needs a recent
+  Python and around 20 dependencies, several of which aren't packaged in
+  nixpkgs at all, and it moves fast enough that hash-pinning the whole
+  thing would be constant upkeep for no real benefit. Instead, `uv` gets
+  installed declaratively and the actual clone-and-sync work happens in
+  its own one-shot systemd service - `uv` manages the Python interpreter
+  itself, nothing extra needed for that. Same trade-off already made
+  elsewhere in this repo for Zen Browser's mod-fetching: a real network
+  dependency for something too fast-moving to fully pin, not the norm
+  everywhere else.
+- **That setup work deliberately does *not* run inline during
+  activation** - it used to, and that was a real, observed bug: syncing
+  Python plus twenty packages ran synchronously inside the main
+  activation service, blocking the entire rebuild on it, and on a slow
+  connection could run past home-manager's own activation timeout and
+  kill the *whole* rebuild, not just this one app's setup. Watched this
+  actually happen in testing. Fixed by moving the heavy lifting to its
+  own service and having activation just kick it off in the background -
+  activation returns immediately no matter how long the sync takes, and
+  the actual server waits for a real, finished sync before it starts,
+  whether that start comes from the background kick or a later login.
+- **The server itself runs as a normal user service**, restarting
+  automatically on failure with a generous retry budget - mostly a
+  leftover safety net from before the setup got split out, kept because
+  it's cheap insurance against a slow first start.
+- **The home-manager activation timeout got tuned down to 30 seconds**
+  from the 5-minute default - and that number is worth double-checking
+  if a rebuild ever ends up failing with a timeout in the logs. A live
+  VM test at that value did show activation getting killed a little over
+  20 seconds in, before some steps had even run - so on a slow first
+  activation, this really can cut things short. It's a real trade-off,
+  not obviously the right number forever.
+- **The API-config file is seeded once and never overwritten.** Checked
+  FCC's own source to confirm this exact path (not the cloned repo's
+  own `.env`) is what the running server actually reads live config
+  from, and what its own admin UI writes API keys back into. Force-
+  declaring it the way some other config files in this repo are managed
+  would fight that admin UI for ownership and wipe out a pasted-in key
+  on every rebuild - so it's only written if it doesn't exist yet, same
+  pattern as the Papirus icon copy elsewhere. The seed leaves the actual
+  provider API key commented out, since generating one isn't something
+  this repo can do for you - grab a free one from NVIDIA and paste it
+  in, or set it through FCC's own admin UI instead.
+- **Claude Code's own state file gets one specific flag merged in** -
+  documented upstream as the fix for Claude Code still prompting a real
+  Anthropic login even with FCC's URL/token already set. Merged in with
+  `jq`, not overwritten outright, since this file is Claude Code's real
+  session state and a full overwrite would either destroy that or fight
+  the CLI for ownership of a file it's constantly writing to itself.
+- **JetBrains' own agent registry gets the same careful, merge-only
+  treatment** - it's a shared, IDE-wide file that could list other
+  unrelated agents, so the merge only ever touches the one entry this
+  setup cares about, additively, so it can't clobber anything else
+  already registered there.
+- **Android Studio gets covered a more direct way, separately** - the
+  JetBrains-wide registry patch above targets JetBrains' generic
+  mechanism for this, but whether Anthropic's own dedicated plugin
+  actually reads that same registry is genuinely unverified upstream.
+  So Android Studio also gets the wrapped-binary treatment described in
+  its own section - more reliable anyway, since whatever the plugin
+  spawns as a subprocess just inherits the wrapped process's environment
+  through normal OS process inheritance, regardless of which internal
+  mechanism the plugin actually uses to read its config.
+- **None of this is wired system-wide, on purpose.** The FCC connection
+  details only get set inside VS Code's own settings, the JetBrains
+  registry, and Android Studio's wrapped binary specifically - never as
+  a plain session-wide environment variable, which would silently
+  redirect *every* terminal's real `claude` command through FCC too and
+  break normal, properly-authenticated Claude Code usage everywhere
+  else. FCC ships its own separate launcher for terminal use instead,
+  which only sets these variables for itself.
+- **Only Claude Code gets wired up here** - FCC's own installer offers
+  hookups for several other agent CLIs too, each with its own
+  third-party installer script. None of that runs; only what Claude Code
+  actually needs gets installed.
+- **The connection details live in exactly one shared place**, not
+  copied into three separate files - it used to be copied, and that was
+  a real bug: turning FCC off in `vayori.apps` left VS Code and Android
+  Studio still pointed at a proxy that was never actually started, with
+  no error, just a Claude Code integration silently trying to talk to a
+  dead port instead of falling back to the real API. Fixed by
+  publishing the connection info from one shared place and having both
+  editors check whether FCC is actually enabled before using it -
+  verified in both directions: built with FCC on (nothing changed), then
+  built again with it stripped from `vayori.apps` and confirmed both
+  editors cleanly fell back to their plain, unwrapped configuration.
+- **Android Studio's `CHROME_EXECUTABLE = "zen"` got the identical
+  fix, for the identical reason** - it only gets set when Zen Browser is
+  actually enabled, since otherwise it'd point at a binary that doesn't
+  exist. A repo-wide check for this exact pattern - one app module
+  hardcoding another app's binary, URL, or port - turned up only these
+  two real cases.

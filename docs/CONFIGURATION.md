@@ -1,13 +1,13 @@
 # Configuration reference
 
-The `.nix` files in this repo are kept comment-free on purpose — this file
-holds the "why" instead. It's organized to match `modules/`: find a file
-you're editing, jump to its section.
+`.nix` files stay comment-free in this repo, so all the "why" lives here
+instead. Organized to match `modules/` - find the file you're editing,
+jump to its doc.
 
-For "how do I add a host/user/app," see the README's
+Looking for "how do I add a host/user/app" instead? That's the README's
 [Using this on your own machine](../README.md#using-this-on-your-own-machine)
-and [Extending it](../README.md#extending-it) sections — this is the deeper
-reference, not the walkthrough.
+and [Extending it](../README.md#extending-it) - the walkthrough, not the
+deep dive.
 
 ## Contents
 
@@ -56,19 +56,20 @@ reference, not the walkthrough.
 
 ## How it's wired together
 
-`flake.nix` calls `inputs.import-tree ./modules`, which recursively imports
-every `.nix` file under `modules/` as a flake-parts module — no manual
-import list anywhere. Two non-obvious consequences:
+`flake.nix` calls `inputs.import-tree ./modules`, which just grabs every
+`.nix` file under `modules/` and imports it automatically. No import list
+to maintain. Two things trip people up because of that:
 
-- **Any path containing `/_` is skipped.** Used deliberately for
-  `_hardware.nix` so it can be a plain NixOS module instead of a named
-  `flake.nixosModules.*` one.
-- **Flakes only see git-tracked files.** A new `.nix` file that hasn't been
-  `git add`ed is invisible to `nix flake check`/`nix build` — it silently
-  evaluates as if it doesn't exist, rather than erroring. `git add` new
-  files first if something "isn't picking up."
+- **Anything with `/_` in the path gets skipped.** That's why
+  `_hardware.nix` gets to be a plain NixOS module instead of needing its
+  own `flake.nixosModules.*` name - it's deliberately invisible to the
+  auto-import.
+- **Untracked files are invisible files.** A new `.nix` file that hasn't
+  been `git add`ed doesn't error, it just quietly doesn't exist as far as
+  `nix flake check`/`nix build` is concerned. If something "isn't picking
+  up," this is almost always why.
 
-Two option namespaces get populated across these files:
+Three option namespaces get filled in across all these files:
 
 | Namespace | Set by | Read by |
 | --- | --- | --- |
@@ -76,10 +77,9 @@ Two option namespaces get populated across these files:
 | `flake.homeModules.apps.*` | `modules/apps/**/*.nix` (any depth) | `core/Users.nix`, via `vayori.apps` |
 | `flake.devLanguages.*` | `modules/apps/development/languages/*/*.nix` | `Vscode.nix`/`AndroidStudio.nix`, filtered by `vayori.apps` |
 
-All of the above is attribute-name-based, not path-based — `Host.nix`
-imports `self.nixosModules.dms`, never a file path. Moving a file to a
-different directory never requires touching `Host.nix`'s `modules` list
-or `vayori.apps`, only a rename of the attribute itself would.
+None of this cares about file paths, only attribute names - `Host.nix`
+imports `self.nixosModules.dms`, never a path. Move a file wherever you
+want; nothing breaks unless you also rename the attribute.
 
 ## Project structure
 
@@ -94,47 +94,44 @@ modules/
   assets/      static, non-code files (wallpapers)
 ```
 
-`core`/`desktop`/`system` boundary, briefly: **core** is pure
-framework/wiring, nothing here is itself a "setting" (`Parts.nix`,
-`Registry.nix`, and the `vayori.users`/`vayori.apps` option definitions in
-`Users.nix`). **desktop** is everything that makes this specific rice look
-and feel the way it does — swap the compositor or shell and this whole
+The `core`/`desktop`/`system` split, quickly: **core** is pure plumbing -
+nothing in it is itself a setting, just the framework that lets settings
+exist (`Parts.nix`, `Registry.nix`, the `vayori.users`/`vayori.apps`
+definitions). **desktop** is everything that makes this rice look and
+feel the way it does - swap the compositor or shell and this whole
 category changes. **system** is infra that doesn't care what desktop
-you're running (Docker, GRUB theming). The line between `desktop` and
-`system` is "does this depend on niri/DMS specifically" — GRUB theming
-doesn't, so it's `system`, not `desktop`, even though it's still
-"theming."
+you're running - Docker, GRUB theming. The dividing line is "does this
+need niri/DMS to exist" - GRUB theming doesn't, so it lives in `system`
+even though it's still, technically, theming.
 
-`apps/` is split into three categories — `development/`, `gaming/`,
-`utils/` — and every app is a folder (`apps/<category>/<name>/<name>.nix`)
-whether or not it currently has extra assets alongside it, so adding a
-font file or script to an app later never means restructuring it from a
-flat file into a folder. The category is purely organizational: only the
-`flake.homeModules.apps.<Name>` attribute name matters to the rest of the
-repo (`vayori.apps`, `core/Users.nix`'s `availableApps`), so an app can
-move between categories, or nest arbitrarily deep, without touching
-anything outside its own folder.
+`apps/` splits into three categories - `development/`, `gaming/`,
+`utils/` - and every app gets a folder (`apps/<category>/<name>/<name>.nix`)
+whether it needs one yet or not, so adding a stray asset later never means
+restructuring anything. The category itself is just for tidiness: the
+only thing that actually matters anywhere else in the repo is the
+`flake.homeModules.apps.<Name>` attribute name, so an app can move
+between categories, or nest as deep as it wants, and nothing outside its
+own folder notices.
 
-`apps/development/editors/` holds the three editors (`Vscode`,
-`AndroidStudio`, `Zed`), each a normal app plus a *consumer* of
-`flake.devLanguages` (see below) — grouped in their own folder mainly so
-"which apps are editors that read language data" is visible from the
-directory listing alone, not something you'd otherwise have to grep for.
+`apps/development/editors/` is where the three editors live (`Vscode`,
+`AndroidStudio`, `Zed`) - each a normal app that also *reads*
+`flake.devLanguages` (more on that below). Grouped in their own folder
+mostly so "these are the apps that care about languages" is obvious from
+the file tree instead of something you'd have to go grepping for.
 
-`apps/development/languages/` is its own thing within `development/`: one
-folder per language (`Cpp`, `Rust`, `Kotlin`, `Flutter` — covers Dart too,
-one toggle for both, see that section — `Nix`, `Qt`), each both a normal
-app (`flake.homeModules.apps.<Lang>` installs that language's
-LSP/toolchain) *and* a data source (`flake.devLanguages.<Lang>`) that
-every editor above reads to decide which of its own extensions/plugins to
-install — see [core/DevLanguages.nix](core.md#modulescoredevlanguagesnix).
+`apps/development/languages/` is its own thing inside `development/`: one
+folder per language (`Cpp`, `Rust`, `Kotlin`, `Flutter` - covers Dart too,
+one toggle does both, see that section - `Nix`, `Qt`). Each one is a
+normal app (`flake.homeModules.apps.<Lang>` installs the actual
+LSP/toolchain) that's *also* a data source (`flake.devLanguages.<Lang>`)
+every editor reads to figure out what extensions it needs. See
+[core/DevLanguages.nix](core.md#modulescoredevlanguagesnix).
 
-`apps/gaming/` is one app (`Gaming`) split across multiple files for
-readability: `Gaming.nix` is the actual `flake.homeModules.apps.Gaming`
-entry, and `_launchers.nix`/`_proton.nix`/`_performance.nix` are plain
-home-manager module fragments it `imports` by relative path — the leading
-underscore keeps them out of import-tree's own auto-import (same trick as
-`_hardware.nix`), since they aren't flake-parts modules on their own.
+`apps/gaming/` is one app (`Gaming`) spread across a few files just so no
+single file gets huge: `Gaming.nix` is the real
+`flake.homeModules.apps.Gaming` entry, and `_launchers.nix`/`_proton.nix`/
+`_performance.nix` are plain fragments it pulls in by relative path. The
+underscore keeps import-tree from trying to treat them as modules of
+their own - same trick as `_hardware.nix`.
 
 ---
-

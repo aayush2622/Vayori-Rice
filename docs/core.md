@@ -6,28 +6,31 @@
 
 ## `modules/hosts/<name>/Host.nix`
 
-**`vayori.theme`** is a submodule option declared inline here (not in a
-shared file like `vayori.users`/`vayori.apps` — it's a per-host preference,
-and this repo only has one host), with sane defaults baked in (JetBrainsMono
-Nerd Font, Bibata-Modern-Ice, Tela-circle). Override one field without
-redeclaring the rest: `vayori.theme.font = "Fira Code";` changes it
-everywhere at once — fontconfig, GTK, kitty, DMS all read the same option.
+**`vayori.theme`** is a submodule declared right here, not in a shared
+file like `vayori.users`/`vayori.apps` - it's a per-host preference, and
+there's only one host so far. Comes with sane defaults (JetBrainsMono
+Nerd Font, Bibata-Modern-Ice, Tela-circle). Change one field without
+touching the rest - `vayori.theme.font = "Fira Code";` and it updates
+everywhere at once, since fontconfig, GTK, kitty, and DMS all read the
+same option.
 
-NixOS modules read `config.vayori.theme.*` directly, like any option.
-Home-manager modules can't — they're a separate module instantiation that
-never sees the parent NixOS `config` — so `Users.nix` re-exports it via
-`home-manager.extraSpecialArgs = { vayoriTheme = config.vayori.theme; };`.
+NixOS modules can read `config.vayori.theme.*` directly. Home-manager
+modules can't - they run as a totally separate module tree that never
+sees the parent config - so `Users.nix` hands it over explicitly via
+`extraSpecialArgs`.
 
-Not wired to `vayori.theme`: the SDDM greeter's bundled font and GRUB's
-theme package — see [Fonts.nix / Portals.nix](desktop.md#modulesdesktopfontsnix--portalsnix).
+Not wired to `vayori.theme`, if you're wondering: the SDDM greeter's
+bundled font and GRUB's own theme package. See
+[Fonts.nix / Portals.nix](desktop.md#modulesdesktopfontsnix--portalsnix).
 
-**Two Nix gotchas hit while building this file:**
+**Two Nix landmines hit while building this file, worth knowing about:**
 
-1. A module can't mix `options.x = ...` with implicit top-level config keys.
-   Once `options.vayori.theme` is declared, everything else has to move
-   under `config = { ... };`, or NixOS throws `unsupported attribute 'boot'`.
-2. An inline lambda module right after a `path` list element parses as
-   function application, not two list items:
+1. A module can't mix `options.x = ...` with plain top-level config keys.
+   Declare `options.vayori.theme` and suddenly everything else has to
+   move under `config = { ... };`, or you get a cryptic `unsupported
+   attribute 'boot'` error that gives you no hint why.
+2. An inline lambda right after a path in a list doesn't parse the way
+   you'd expect - it reads as a function call, not a second list item:
 
    ```nix
    modules = [
@@ -36,408 +39,270 @@ theme package — see [Fonts.nix / Portals.nix](desktop.md#modulesdesktopfontsni
    ];
    ```
 
-   Fix: wrap it in parens — `({ pkgs, ... }: { ... })`.
+   Wrap it in parens and it's fine: `({ pkgs, ... }: { ... })`.
 
-**Build/closure**: `nix.settings.auto-optimise-store = true` hardlinks
-identical files across store paths. `documentation.nixos.enable = false`
-skips building the local NixOS manual (`man configuration.nix` and
-`nixos-option` still work). `nix.gc = { automatic = true; dates =
-"weekly"; options = "--delete-older-than 30d"; };` runs garbage
-collection on a schedule — without this, `/nix/store` only ever grows;
-old generations older than 30 days get collected weekly instead of
-needing a manual `nix-collect-garbage -d`.
+**Store/build housekeeping**: `auto-optimise-store` hardlinks identical
+files across store paths so they don't get stored twice.
+`documentation.nixos.enable = false` skips building the local NixOS
+manual (`man configuration.nix` still works fine, this just skips the
+book). Garbage collection runs weekly, clearing anything older than 30
+days, so `/nix/store` doesn't just grow forever waiting for someone to
+remember `nix-collect-garbage`.
 
-**SDDM login-screen cursor** — three independent gaps, each confirmed
-against source, not guessed:
+**Getting the login screen's cursor right took three separate fixes**,
+none of them guesses - all traced through the actual source:
 
-1. SDDM's Wayland greeter runs under Weston as its own systemd service
-   (`display-manager.service`), so it never sees
-   `environment.sessionVariables` (PAM-only, post-login). Fix:
-   `systemd.services.display-manager.environment` sets the same vars
-   directly for Weston.
-2. Weston itself doesn't guarantee those vars reach the greeter *client*.
-   Per SDDM's own source (`Backend.cpp`), it re-applies
-   `services.displayManager.sddm.settings.General.GreeterEnvironment` (a
-   comma-separated `VAR=value` string — not the usual attrset shape) on top
-   of whatever the greeter would inherit.
-3. NixOS isn't FHS — `/usr/share/icons` doesn't exist, so Xcursor's default
-   search path finds nothing. `XCURSOR_PATH` is set explicitly to
-   `${cursorPackage}/share/icons`. That package also needs to be in
-   `environment.systemPackages` — SDDM runs before any user session exists.
+1. SDDM's Wayland greeter runs as its own systemd service under Weston,
+   which never sees `environment.sessionVariables` - those only apply
+   post-login, via PAM. Fix: set the same variables directly on the
+   `display-manager.service` unit.
+2. Even with that, Weston doesn't guarantee the greeter *client* actually
+   inherits them. SDDM's own source re-applies a separate
+   `GreeterEnvironment` setting on top - a comma-separated string, not
+   the usual attrset shape, easy to get wrong the first time.
+3. NixOS isn't FHS, so there's no `/usr/share/icons` for Xcursor to fall
+   back to - `XCURSOR_PATH` has to be pointed at the actual package
+   explicitly, and that package needs to be system-wide since SDDM runs
+   before any user session exists to pull it in otherwise.
 
-*Caveat*: QEMU's `screendump` doesn't reliably capture hardware cursor
-planes, so a screenshot not showing a cursor isn't proof it's still broken
-on real output.
+Small caveat: QEMU's screenshot tool doesn't reliably capture the
+hardware cursor, so a screenshot with no visible cursor isn't proof
+anything's actually broken.
 
-**Apps** (`vayori.apps`): pick from file names under `modules/apps/` — the
-one setting most new machines actually need to change. Written here as
-`{ development = [...]; gaming = [...]; utils = [...]; }`, flattened with
-`lib.flatten (lib.attrValues appsByCategory)` before being assigned - the
-option itself (`core/Users.nix`) only ever sees the flat list this
-produces, so the grouping is a call-site convenience, not part of the
-option's type. Every category is a plain list, so a language toggle
-(`"Rust"`, `"Flutter"`, ...) sits inside `development` right alongside the
-editors that read it.
+**Apps** (`vayori.apps`) is the one setting most new machines actually
+need to touch - just filenames under `modules/apps/`. Written here
+grouped by category for readability, then flattened to a plain list
+before anything downstream ever sees it - the option itself has no idea
+the grouping exists, it's purely cosmetic at the call site.
 
-**`programs.steam.enable = true`** lives here, not in
-[Gaming.nix](apps-gaming.md#modulesappsgaminggamingnix) — see that section for why.
+**`programs.steam.enable`** lives here, not in
+[Gaming.nix](apps-gaming.md#modulesappsgaminggamingnix) - see that page
+for why.
 
-**Users** (`vayori.users`): one entry per real account — see
-[core/Users.nix](#modulescoreusersnix) for field meanings. Generate a
-password hash with `mkpasswd -m sha-512`.
+**Users** (`vayori.users`): one entry per real person. Field meanings are
+in [core/Users.nix](#modulescoreusersnix) below. `mkpasswd -m sha-512`
+makes the password hash.
 
 ---
 
 ## `modules/hosts/<name>/_hardware.nix`
 
-Unlike everything else under `modules/`, this is a **plain NixOS module** —
-no `flake.nixosModules.X` wrapper. The leading `_` makes import-tree skip
-it, so it's only reachable via `Host.nix`'s `./_hardware.nix` import (a raw
-NixOS module's top-level keys like `boot`/`fileSystems` aren't valid
-flake-parts options on their own).
+The one file in this repo that isn't a proper flake-parts module - no
+`flake.nixosModules.X` wrapper, just a plain NixOS module. The leading
+underscore keeps import-tree from trying anyway; it only ever gets pulled
+in through `Host.nix`'s own `./_hardware.nix` import.
 
-To generate one for a different machine:
+To make one for a different machine:
 
 ```bash
 sudo nixos-generate-config --show-hardware-config > modules/hosts/<name>/_hardware.nix
 ```
 
-Then drop the Nvidia/Optimus block entirely unless you also have an Nvidia
-Optimus laptop — `intelBusId`/`nvidiaBusId` are this machine's PCI
-addresses (`lspci` for yours).
+Then delete the Nvidia/Optimus block entirely unless you're also on an
+Nvidia Optimus laptop - `intelBusId`/`nvidiaBusId` are this specific
+machine's PCI addresses, not yours (`lspci` finds your own).
 
-**Nvidia block:**
-- `powerManagement.enable`/`finegrained` — lets the dGPU fully power down
-  via PRIME offload when idle, instead of draining battery while unused.
-- `open = false` — the RTX 3050 (Ampere) supports the open kernel module,
-  but closed is the safer default.
-- `prime.offload` — iGPU drives the display; dGPU spins up only for apps
-  launched via `nvidia-offload <cmd>`. For "dGPU renders everything,
-  always on" instead, use `prime.sync.enable = true` and drop the
-  `powerManagement` lines.
+**The Nvidia block, briefly:**
+- Power management lets the dGPU actually power down when idle via PRIME
+  offload, instead of quietly draining battery doing nothing.
+- The open kernel module would work fine on this RTX 3050, but closed is
+  still the safer default.
+- PRIME offload means the iGPU drives the display and the dGPU only
+  wakes up for apps launched through `nvidia-offload`. Want the dGPU
+  running everything all the time instead? Swap to `prime.sync.enable`
+  and drop the power-management lines.
 
-**`services.asusd` and `services.supergfxd` are separate daemons**, despite
-both living under `nixos/modules/services/hardware/`. `asusd` (`asusctl`)
-handles keyboard LEDs/fan curves/battery limits — **it does not touch GPU
-switching**. GPU mux switching (Integrated/Hybrid/dGPU) is `supergfxctl`,
-gated behind its own `services.supergfxd.enable`. Enabling only `asusd`
-leaves `supergfxd` never running, so nothing ever mux-switches back to
-Hybrid — the dGPU can stay powered off indefinitely, indistinguishable from
-a real driver failure.
+**`asusd` and `supergfxd` are two separate daemons that like to get
+confused for one another.** `asusd` handles keyboard lighting, fan
+curves, battery limits - it does *not* touch GPU switching. That's
+`supergfxd`'s job, gated behind its own separate enable flag. Turn on
+`asusd` alone and GPU mode switching silently does nothing - looks
+exactly like a broken driver, isn't one.
 
-- **`services.supergfxd.settings` is deliberately left unset** - it used
-  to declare `{ mode = "Hybrid"; }`, which sounded like a reasonable way
-  to make the mode declarative instead of a one-time `supergfxctl -m
-  Hybrid` you'd have to remember on every install, but it's a real bug:
-  `nixos/modules/services/hardware/supergfxd.nix` writes `settings` (when
-  set) to `/etc/supergfxd.conf` as a symlink into the Nix store -
-  `environment.etc."supergfxd.conf" = lib.mkIf (cfg.settings != null)
-  { source = json.generate ...; };` - every `nixos-rebuild switch`
-  re-creates that symlink pointing at the declared value, so switching
-  GPU mode through `asusctl`/the DankAsusControl widget (which writes
-  through to that same file) would appear to work for the rest of the
-  session and then silently revert to `Hybrid` on the next rebuild for
-  *any* reason, not just a GPU-related one. Leaving `settings` unset
-  means NixOS never touches `/etc/supergfxd.conf` at all
-  (`lib.mkIf (cfg.settings != null)` is then just false), so `supergfxd`
-  owns it as an ordinary mutable file and mode switches actually persist.
-  Confirmed by building and checking the produced system's `/etc` no
-  longer contains a `supergfxd.conf` entry at all.
-- `systemd.services.supergfxd.path = [ pkgs.pciutils ]` works around
-  [nixpkgs#239059](https://github.com/NixOS/nixpkgs/issues/239059) — without
-  it, `supergfxd` can't find the dGPU at all.
-- **`services.power-profiles-daemon` is deliberately not enabled** once
-  `asusd` is — `asusd` implements the same
-  `org.freedesktop.UPower.PowerProfiles` D-Bus name itself, so running both
-  is a straight name collision: whichever starts second silently loses
-  profile switching.
+- **`services.supergfxd.settings` is deliberately left unset.** It used
+  to pin the mode to `"Hybrid"`, which sounded reasonable - declarative
+  beats remembering a manual command - except it's a real bug: NixOS
+  writes that setting straight to `/etc/supergfxd.conf` as a symlink
+  into the read-only Nix store, and re-creates that symlink on *every*
+  rebuild, for any reason. So switching GPU modes through asusctl or the
+  DankAsusControl widget would appear to work, right up until the next
+  rebuild silently reset it back to Hybrid. Leaving `settings` unset
+  means NixOS never touches that file at all, so `supergfxd` gets to own
+  it as a normal file and mode switches actually stick. Checked this by
+  building and confirming the file's just gone from the output.
+- `supergfxd` also needs `pciutils` on its `PATH` or it can't find the
+  dGPU at all - a known nixpkgs gap, worked around here.
+- **`power-profiles-daemon` stays off** once `asusd` is on - they both
+  claim the same D-Bus name for power profiles, so running both just
+  means whichever starts second silently loses.
 
 ---
 
 ## `modules/hosts/<name>/Vm.nix`
 
-Everything `virtualisation.vmVariant` touches lives here, not scattered
-across whichever file happens to reference the hardware it's disabling —
-`nixos-rebuild build-vm`/`nix build .#nixosConfigurations.Diablo.config.system.build.vm`
-is one concern, kept in one file. Three independent fixes, all only active
-for the VM build (`config.system.build.toplevel`, the real deployed
-system, never sees `vmVariant` at all):
+Everything the VM build (`nixos-rebuild build-vm`) needs that the real
+machine doesn't lives here, in one file, instead of scattered wherever
+someone felt like disabling hardware. Three separate fixes, all VM-only -
+the real deployed system never sees any of this:
 
-1. QEMU has no Nvidia GPU and no ASUS hardware. The real Nvidia driver
-   stack (gated via `services.xserver.videoDrivers`) leaves niri with no
-   working DRM device if left enabled, so it's cleared for the VM build,
-   falling back to `modesetting`, which QEMU's virtual GPU supports
-   natively. `asusd`/`supergfxd` are force-disabled the same way.
-2. Clearing the Nvidia stack still left the VM black after "Reached
-   target Graphical Interface." Root cause: QEMU's `bochs-drm` has no real
-   DRI2 driver, so the SDDM greeter's QML frontend (a Wayland *client*,
-   unlike Weston's own server-side renderer) can't get a hardware EGL
-   context — Mesa's `zink` fallback then also fails (no Vulkan ICD). Fix:
-   `QT_QUICK_BACKEND=software` in the VM's `GreeterEnvironment`, forcing
-   the greeter to skip EGL/GL entirely. VM-only — real hardware has a
-   working Intel iGPU and shouldn't pay the software-rendering cost.
-3. Getting past the greeter, niri's own TTY/DRM backend still had no real
-   GPU allocator (`no allocator available for device`, zero outputs) with
-   a plain `virtio`/`std` VGA device — needs `-device virtio-vga-gl` with
-   a GL-enabled display (`gtk,gl=on`) instead, backed by the *host's* own
-   GPU. The catch on a non-NixOS dev host (this one's EndeavourOS): the
-   Nix-built qemu looks for mesa's GBM/DRI/EGL drivers under NixOS's own
-   `/run/opengl-driver` convention, which doesn't exist here. Rather than
-   requiring env vars at launch time, `qemuWithHostGL` wraps the qemu
-   *binary itself* (`makeWrapper`) with this host's real Arch mesa paths
-   (`/usr/lib/{dri,gbm}`) — so the plain, unmodified
-   `nix build .../vm` + `./result/bin/run-<name>-vm` workflow just works,
-   confirmed by booting it and watching the exact `MESA-LOADER`/
-   `gbm_create_device failed` errors this fixes disappear. Dev-host-specific
-   by nature — these are EndeavourOS/Arch's real mesa paths, not something
-   portable to another distro's layout. On a real NixOS host this wrapper
-   is actively wrong (`/usr/lib/dri` doesn't exist there, and the unwrapped
-   `qemu_kvm` already finds `/run/opengl-driver` natively) — swap
-   `qemuWithHostGL` back to plain `pkgs.qemu_kvm` if this ever moves off
-   this specific dev machine.
+1. QEMU has no Nvidia GPU and no ASUS hardware, so the real Nvidia driver
+   stack gets cleared for the VM build in favor of QEMU's own virtual
+   GPU. `asusd`/`supergfxd` get force-disabled the same way.
+2. That alone still left the VM stuck on a black screen after boot.
+   Turns out QEMU's virtual GPU has no real hardware-accelerated
+   rendering path, so the greeter's Wayland client couldn't get a
+   graphics context and its software fallback also failed. Fix: force
+   software rendering in the VM's greeter environment specifically -
+   real hardware has a working Intel iGPU and shouldn't pay that cost.
+3. Past the greeter, niri itself still couldn't find a GPU allocator with
+   a plain virtual display device - needed a GL-enabled virtio display
+   backed by the *host's* real GPU instead. The wrinkle: the dev machine
+   this was built on isn't NixOS, so the Nix-built QEMU couldn't find
+   that host's mesa drivers in the paths it expected. Fixed with a
+   wrapper that points QEMU at this specific host's actual driver paths -
+   which means it's genuinely tied to this one dev machine's distro
+   layout, and would need swapping back to plain `qemu_kvm` on an actual
+   NixOS host, where the problem doesn't exist in the first place.
 
 ---
 
 ## `modules/core/Users.nix`
 
-Shared framework — what a `vayori.users.<name>` entry can contain and how
-it becomes an account. Add a *person* inline in a host's `Host.nix`; only
-touch this file to change what fields a user entry supports.
+The shared framework behind every `vayori.users.<name>` entry - what
+fields exist, what they do. Add an actual *person* in a host's
+`Host.nix`; only touch this file if you want to change what a person
+entry can contain.
 
-- `hashedPassword`: generate with `mkpasswd -m sha-512`. `null` falls back
-  to `initialPassword = "changeme"`.
-- `extraGroups`: `"wheel"` for sudo, `"adbusers"` for Android debugging
-  (see [AndroidStudio.nix](apps-development.md#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)).
-- `availableApps` auto-discovers from `modules/apps/**/*.nix` (any depth)
-  — add an app by dropping a folder anywhere under `modules/apps/`,
-  nothing here changes.
-- Every user's `home-manager-<name>.service` gets
-  `after`/`wants = [ "network-online.target" ]` here, generically — any
-  app's activation script that touches the network (currently
-  [ZenBrowser.nix](apps-utils.md#modulesappsutilszenbrowserzenbrowsernix)'s mods/profile
-  fetch) would otherwise race the NIC coming up during boot.
-
----
+- `hashedPassword`: generate with `mkpasswd -m sha-512`. Leave it `null`
+  and you get `changeme` as a fallback initial password instead.
+- `extraGroups`: `"wheel"` for sudo, `"adbusers"` for Android debugging.
+- The list of valid app names auto-discovers from every `.nix` file under
+  `modules/apps/`, at any depth - add an app by dropping a folder in,
+  nothing here needs to change.
+- Every user's activation service waits for the network to come up
+  first, generically - some app's activation script (ZenBrowser's mod/
+  profile fetch, currently) needs it, and without this it can race the
+  network interface coming up during boot.
 
 ---
 
 ## `modules/core/DevLanguages.nix`
 
-Declares `options.flake.devLanguages` — the same publish-data-at-`self`
-pattern as `flake.pluginPins`/`flake.matugenTemplates`/`flake.freeClaudeCode`
-— so that editors and language modules can be decoupled from each other
-entirely: a language module has no idea which editors exist, and an editor
-has no idea which languages exist, they only agree on this option's shape.
+Declares `flake.devLanguages` - same "publish data at `self`" pattern as
+matugen templates and plugin pins - so language modules and editors
+never have to know about each other directly. A language module has no
+idea which editors exist; an editor has no idea which languages exist.
+They just agree on what shape this data comes in.
 
-- **The problem this solves**: before this, `Vscode.nix` hardcoded a
-  `dart-code.dart-code` reference and `AndroidStudio.nix` hardcoded a
-  `Dart`/`io.flutter` plugin reference, with no connection to whether Dart
-  tooling was actually installed anywhere — removing "Dart" as a concept
-  wouldn't have removed anything from either editor, and the reverse
-  (editors carrying extensions for languages you don't even have a
-  compiler for) was the actual complaint that prompted this file.
-- **Each `modules/apps/development/languages/<Lang>/<Lang>.nix`** sets
-  two things:
-  - `flake.homeModules.apps.<Lang>` — a completely normal app, installing
-    that language's LSP + toolchain (`rust-analyzer`+`rustc`+`cargo` for
-    Rust, `nil`+`nixfmt` for Nix, etc.). Toggled the same way as any other
-    app, via `vayori.apps`.
-  - `flake.devLanguages.<Lang>` — data only, no packages. Conventionally
-    `{ vscode = { nixpkgsExtensions; marketplaceExtensions; manualExtensions; settings; }; androidStudio = { autoPlugins; manualPlugins; }; }`,
-    but nothing here enforces that shape — an editor reads whichever
-    sub-keys it understands (`l.vscode or {}`) and ignores the rest, so a
-    language module can add an `androidStudio` block without every editor
-    needing a matching one, and a future editor can start reading
-    `flake.devLanguages` without every language module changing.
-- **Editors do the filtering, not this file**: `self.devLanguages` itself
-  is unfiltered (it's flake-level data, evaluated once, with no host to
-  filter against). All three editors — `Vscode.nix`, `AndroidStudio.nix`,
-  `Zed.nix` — each compute their own `enabledLanguages = lib.filterAttrs
-  (name: _: builtins.elem name vayoriApps) self.devLanguages` inside their
-  home-manager module (where `vayoriApps` — `config.vayori.apps`, threaded
-  via `home-manager.extraSpecialArgs` in `core/Users.nix` — is actually
-  available), then fold every enabled language's contribution into their
-  own extension/plugin/settings lists. Remove a language from
-  `vayori.apps` and its extensions vanish from every editor in the same
-  rebuild, with nothing to update in the editor files themselves.
-- **`Zed.nix` merges `settings` with `lib.recursiveUpdate`, not `//`
-  like `Vscode.nix`** — Zed's own settings schema nests everything
-  language-adjacent under a couple of shared top-level keys (`lsp.*`,
-  `languages.*`), so two languages that both configure an `lsp.*` entry
-  (or a language and this file's own generic settings, if a future
-  generic `lsp.*` entry gets added) need to survive under the same `lsp`
-  key rather than one clobbering the other - which is exactly what a
-  shallow `//` would do the moment two contributions touched the same
-  top-level settings key. `Kotlin.nix`'s `lsp.kotlin-language-server` /
-  `languages.Kotlin` is the one real example of this shape today.
-  VSCode's settings happen to never collide this way (every language uses
-  a distinct top-level key like `"[cpp]"`/`"[dart]"`/`"nix.*"`), so `//`
-  was safe there, but it's not a general guarantee - a future language
-  colliding with another under the same VSCode top-level key would need
-  the same fix.
-- **`nixpkgsExtensions` are dotted strings** (`"rust-lang.rust-analyzer"`),
-  not direct `pkgs.vscode-extensions.rust-lang.rust-analyzer` references —
-  language modules don't have `pkgs` in scope at the point they publish
-  this data (it's flake-level, evaluated once per flake, not per-system),
-  so the string gets resolved inside `Vscode.nix`'s own home-manager
-  module (which does have `pkgs`) via `lib.attrByPath (lib.splitString "."
-  dotted) (throw "...") pkgs.vscode-extensions`. The `throw` on a missing
-  path is deliberate — a typo'd extension name fails the build loudly
-  instead of silently installing nothing, which is exactly how `Kotlin.nix`
-  caught that `pkgs.vscode-extensions.fwcd.kotlin` doesn't actually exist
-  (nixpkgs only curates `mathiasfrohlich`'s Kotlin extension natively;
-  `fwcd`'s is marketplace-only) during a real build, not at review time.
-- **Manual (fetchurl-pinned) extensions/plugins still funnel through
-  `Vscode`/`AndroidStudio`'s own `flake.pluginPins` keys**, not a
-  per-language one — see the note in
-  [PluginUpdateCheck.nix](#modulescorepluginupdatechecknix) below for why
-  (the checker script only knows those two names). `Cpp.nix`'s
-  `cpp-extentions-pack` pin is the one example today: it lives in
-  `flake.devLanguages.Cpp.vscode.manualExtensions`, and `Vscode.nix`
-  aggregates every language's `manualExtensions` into
-  `flake.pluginPins.Vscode` itself, unfiltered by `vayori.apps` (same
-  reasoning as above — no host to filter against at that point).
-- **Dart and Flutter are one language module, `Flutter.nix`, not two** —
-  `pkgs.flutter` bundles its own Dart SDK, and every real Dart-using
-  project on this machine is a Flutter one anyway, so there was never a
-  case where splitting them into separate toggles bought anything. Its
-  VSCode contribution installs both `dart-code.dart-code` and
-  `dart-code.flutter` together (the Flutter extension doesn't work
-  without the Dart one, so it's not optional), and its Android Studio
-  contribution installs all 4 plugins (`Dart`, Flutter Enhancement Suite,
-  `flutter-intellij`, `flutter-intl`) the same way.
-
----
+- **What this actually fixes**: before this existed, `Vscode.nix` just
+  hardcoded a Dart extension reference and `AndroidStudio.nix` hardcoded
+  a Dart plugin reference, with zero connection to whether Dart tooling
+  was even installed. Remove "Dart" as a concept and nothing changes in
+  either editor. That mismatch - editors quietly carrying extensions for
+  languages you don't even have a compiler for - is exactly what this
+  file exists to close.
+- **Every language folder sets two things**: a normal app
+  (`flake.homeModules.apps.<Lang>`, installs the actual LSP + toolchain,
+  toggled through `vayori.apps` like anything else) and pure data
+  (`flake.devLanguages.<Lang>`, no packages, just what each editor should
+  grab). The data has a loose conventional shape but nothing enforces
+  it - an editor reads whichever keys it understands and ignores the
+  rest, so adding a new editor, or a new field for one language, never
+  requires touching every other file.
+- **Editors do their own filtering.** The published data is unfiltered -
+  it's flake-level, evaluated once, with no host to filter against yet.
+  Each editor works out which languages are actually enabled on its own,
+  right where `vayori.apps` is actually available, then folds in
+  whatever each enabled language contributed. Turn a language off and
+  its extensions disappear from every editor on the next rebuild -
+  nothing to go update by hand.
+- **Zed merges its settings with a deep merge, VS Code with a shallow
+  one** - and that's not arbitrary. Zed nests language-adjacent settings
+  under a couple of shared top-level keys, so two languages touching the
+  same key need to survive together, not clobber each other. VS Code's
+  settings happen to never collide this way today (every language uses
+  its own distinct key), so a shallow merge is safe there for now - just
+  not guaranteed to stay that way forever if a future language collides.
+- **Extension names for VS Code are plain strings**
+  (`"rust-lang.rust-analyzer"`), not direct package references - language
+  modules don't have `pkgs` in scope at the point they publish this data.
+  The string gets resolved inside VS Code's own module instead, and a
+  typo throws loudly rather than silently installing nothing. That's
+  exactly how a real bug got caught here: `fwcd.kotlin` isn't actually in
+  nixpkgs' curated extension set (only a similarly-named one is), and the
+  throw caught it during a real build, not during review.
+- **Manually-pinned extensions/plugins still funnel through the editor's
+  own pin list**, not a separate per-language one - the update-checker
+  script only knows to look for `Vscode`/`AndroidStudio` by name, so
+  anything else would just get silently skipped. Each editor gathers
+  every enabled language's manual pins into its own list instead.
+- **Dart and Flutter are one toggle, not two.** `pkgs.flutter` already
+  bundles its own Dart SDK, and every real Dart project on this machine
+  is a Flutter one anyway - splitting them never bought anything.
 
 ---
 
 ## `modules/core/PluginUpdateCheck.nix`
 
-A check-only, zero-extra-commands plugin/extension update reporter for
-[Vscode.nix](apps-development.md#modulesappsdevelopmenteditorsvscodevscodenix),
-[AndroidStudio.nix](apps-development.md#modulesappsdevelopmenteditorsandroidstudioandroidstudionix), and
-[ZenBrowser.nix](apps-utils.md#modulesappsutilszenbrowserzenbrowsernix) - **not**
-[Zed.nix](apps-development.md#modulesappsdevelopmenteditorszedzednix), which has nothing to
-check in the first place: `programs.zed-editor.extensions` is just a list
-of names Zed itself resolves and installs at its own startup (its
-`auto_install_extensions` setting), with no version or hash pinned
-anywhere in this repo to go stale - the same shape as ZenBrowser's own
-extensions/mods, just without even ZenBrowser's existence-checking, since
-there's no Nix-side fetch to fail in the first place. It never modifies a
-pin itself - it only prints what's stale so you can bump the version/hash
-by hand in the matching app file.
+A read-only update reporter for VS Code, Android Studio, and Zen
+Browser's pinned plugins/extensions - deliberately *not* Zed, which has
+nothing to check: its extensions are just names Zed resolves and
+installs itself at its own next startup, nothing pinned here to go
+stale. This script never touches a pin itself, it just tells you what's
+outdated so you can bump it by hand.
 
-- **Where the pins come from**: each of the three app files hoists its
-  pinned-plugin list out of its home-manager module into the file's outer
-  `let`, then publishes it as `flake.pluginPins.<AppName>` (same
-  public-data pattern as
-  [Matugen.nix](desktop.md#modulesdesktopmatugennix)'s `flake.matugenTemplates`,
-  requiring the same kind of `options.flake.pluginPins` declaration -
-  that lives in `modules/core/PluginPins.nix`). The home-manager module
-  then just references the outer binding (`marketplaceExtensions =
-  extensionsFromVscodeMarketplace marketplaceExtensionsSpec;`, etc.), so
-  this refactor changes nothing about what gets installed - confirmed by
-  rebuilding the toplevel and activation packages before and after and
-  getting the same derivations.
-- **`Vscode`/`AndroidStudio`'s pins are now aggregated, not just hoisted**:
-  since [DevLanguages.nix](#modulescoredevlanguagesnix) split each editor's
-  language-specific extensions/plugins out into
-  `modules/apps/development/languages/*/*.nix`, `flake.pluginPins.Vscode`/
-  `.AndroidStudio` are built by folding every `self.devLanguages.*.vscode
-  .manualExtensions`/`.androidStudio.manualPlugins` in, on top of each
-  editor's own non-language-specific manual pins. This has to stay keyed
-  by editor (`Vscode`, `AndroidStudio`), not split into a `pins.Cpp` /
-  `pins.Rust` per language - the Python checker script below only ever
-  looks at `pins.get("Vscode", ...)`/`pins.get("AndroidStudio", ...)` by
-  name, so a per-language key would just be silently skipped, never
-  checked.
-- **Keys are `PascalCase`, matching `self.homeModules.apps`'s own
-  attribute names exactly** (`Vscode`, `AndroidStudio`, `ZenBrowser`) -
-  not the lowerCamelCase used for the *files'* folder names - so
-  filtering pins down to "only the apps this host actually has enabled"
-  is a plain `lib.filterAttrs (name: _: builtins.elem name
-  config.vayori.apps)` with no translation table.
-- **`environment.etc."vayori/plugin-pins.json"`**: that filtered result,
-  serialized with `builtins.toJSON`, landing at
-  `/etc/vayori/plugin-pins.json`. System-wide (not per-user) because
-  `vayori.apps` itself is host-wide, and it keeps the checker script
-  independent of which user's shell triggers it.
-- **`ZenBrowser`'s pins have no version to compare against** - every
-  extension/mod is always installed at whatever's currently `/latest/`
-  (AMO's install URL, the theme-store's raw file), there's nothing
-  pinned to diff. So for this app the checker instead confirms the
-  `slug`/mod id still *resolves* (a 404 from AMO, or an id missing from
-  the theme-store's `themes.json` index, means the add-on/mod was
-  renamed or pulled) - existence-checking, not version-checking.
-- **The checker itself is a stdlib-only Python script**
-  (`pkgs.writers.writePython3Bin`, so it goes through `flake8` at build
-  time - every line had to actually pass lint, not just parse), built as
-  `vayori-check-plugin-updates` and put on `$PATH` via
-  `environment.systemPackages`. No `requests` dependency - just
-  `urllib.request` + a `ThreadPoolExecutor` so every check runs
-  concurrently instead of one network round-trip at a time. Only manual
-  (fetchurl-pinned) entries have a `version` to check - on this host
-  that's currently 1 VS Code extension (`Cpp.nix`'s
-  `cpp-extentions-pack`) + 2 Android Studio plugins (WakaTime,
-  github-copilot-intellij) + 17 Zen extensions + 8 Zen mods; every
-  nix-vscode-extensions/nix-jetbrains-plugins-sourced extension tracks
-  upstream automatically and has nothing pinned to check.
-  - VS Code: one POST per extension to the Marketplace's
-    `extensionquery` API (`filterType 7` = exact `publisher.name`
-    lookup, `flags 513` = versions + latest-only), comparing the
-    pinned `version` against `versions[0].version` in the response.
-  - Android Studio: `GET /plugins/list?pluginId=<xmlId>` on the
-    JetBrains Marketplace's legacy repository endpoint - the modern
-    `/api/plugins/<id>/updates` REST endpoint only accepts a *numeric*
-    plugin id, not the string `xmlId` these pins actually store (e.g.
-    `com.github.catppuccin.jetbrains`, `PythonCore`), and returns a 400
-    for every entry in this repo when tried; confirmed by curling it
-    directly before committing to the fix. The XML response lists every
-    published release of the plugin with an `updatedDate`/`date`
-    timestamp on each - "latest" is picked by that timestamp, not by
-    comparing version strings, because some plugins' history mixes
-    versioning schemes across their lifetime (e.g. `python-ce`'s
-    JetBrains-platform-era `261.x` builds alongside a stray
-    old-scheme `2019.2.192.7142.17` release) and a naive string/numeric
-    max over all of them picks the wrong one. There's no IDE build
-    number pinned anywhere in this repo (`configDataDir =
-    "AndroidStudio2026.1.3"` is a marketing version string, not the
-    numeric build JetBrains' stricter compatibility filtering wants),
-    so this intentionally checks "is there a newer published version at
-    all," not "is there a version compatible with this exact IDE
-    build."
-  - Comparison is plain string inequality, not semver-aware - these
-    pins mix real semver (`0.3.0`), JetBrains build-number versions
-    (`261.25134.120-AS`), and prerelease suffixes (`0.1.14-beta`), so
-    "not equal to what's pinned" is the honest thing to report, not
-    "newer than."
-  - Every network call is wrapped in its own `try/except`; failures
-    (timeouts, DNS, 5xx) are silently skipped rather than reported as
-    "outdated" or as errors - only a genuine version mismatch or a
-    confirmed 404/missing-from-index counts as a finding. A run where
-    every single check failed (fully offline) doesn't write the cache
-    at all, so the next invocation retries instead of going quiet for a
-    full day on a coincidental network blip.
-  - Results are cached at `~/.cache/vayori/plugin-update-check.json`
-    with a 24-hour TTL (`VAYORI_PLUGIN_CHECK_TTL`, seconds) - a cache
-    hit reprints the same report with no network calls at all, which is
-    what makes repeated rebuilds in the same day fast.
-    `VAYORI_PLUGIN_CHECK_FORCE=1` bypasses the cache for a manual
-    re-check.
-  - Silent when there's nothing to report (no pins file yet, nothing
-    outdated) - it only ever prints something when there's an actual
-    finding, so it doesn't add noise to every single build.
-- **Wired in via a zsh `preexec` hook in
-  [Terminal.nix](apps-utils.md#modulesappsutilsterminalterminalnix)**, not a shell
-  alias/function - `preexec` fires for every command a user actually
-  types before it runs, including ones prefixed with `sudo` (which
-  bypasses a function/alias by doing its own `PATH` lookup). The hook
-  pattern-matches the typed command against
-  `nixos-rebuild`/`home-manager switch`/`nix build`/`nix flake`/`nix
-  run` and, only then, runs `timeout 10s vayori-check-plugin-updates`
-  before letting the real command through - so "run the normal rebuild
-  command" is the only thing anyone has to do, and a hung/absent
-  network can delay a rebuild by at most 10 seconds, never longer.
-
----
-
+- **Where the pins actually come from**: each app file hoists its own
+  pinned-plugin list into a shared `flake.pluginPins.<AppName>` spot -
+  same pattern as matugen templates. The home-manager module just
+  references that same binding, so nothing about what actually gets
+  installed changed when this got refactored.
+- **VS Code and Android Studio's pins get aggregated now**, not just
+  hoisted - once language-specific extensions moved into their own
+  files, each editor's pin list has to fold in every enabled language's
+  manual pins on top of its own. Has to stay keyed by editor name, not
+  split per-language, since the checker script only ever looks for those
+  two specific names.
+- **Keys match the app's real attribute name exactly** (`Vscode`, not
+  `vscode`), so filtering down to "only what's actually enabled on this
+  host" needs no translation table, just a straight name comparison.
+- The filtered result lands at `/etc/vayori/plugin-pins.json`, system-wide
+  rather than per-user, since `vayori.apps` itself is host-wide anyway.
+- **Zen Browser's pins have nothing to version-check** - everything
+  installs at whatever's currently latest, there's no pinned version to
+  compare against. So for Zen this script checks *existence* instead: did
+  the extension/mod get renamed or pulled entirely, not "is there a
+  newer version."
+- **The checker itself is a small, dependency-free Python script**, built
+  straight into `$PATH` system-wide. No `requests`, just `urllib` and a
+  thread pool so every check runs at once instead of one at a time.
+  Right now that's 1 VS Code extension, 2 Android Studio plugins, 17 Zen
+  extensions, and 8 Zen mods with anything actually pinned to check -
+  everything sourced automatically from the marketplace/plugin-index
+  inputs tracks upstream on its own with nothing here to go stale.
+  - VS Code: one API call per extension to the Marketplace, comparing
+    the pinned version against whatever's currently published.
+  - Android Studio: JetBrains' modern REST API flatly rejects the string
+    plugin IDs this repo actually stores (confirmed by trying it
+    directly, not assumed) - so this uses the older XML-based endpoint
+    instead, and picks "latest" by publish timestamp rather than
+    comparing version strings, since some plugins mix versioning schemes
+    across their history and a naive max would just pick the wrong one.
+  - Comparisons are plain string inequality, not semver - these pins mix
+    real semver, JetBrains build numbers, and prerelease suffixes, so
+    "not equal to what's pinned" is the only honest thing to report.
+  - Every network call fails quietly on its own - a timeout or DNS
+    hiccup doesn't get reported as "outdated," it just gets skipped. If
+    literally everything fails (fully offline), the cache doesn't get
+    written at all, so the next run retries properly instead of going
+    silent for a full day over a coincidental blip.
+  - Results cache for 24 hours, so rebuilding twice in one day doesn't
+    mean two rounds of network calls. Force a fresh check by setting
+    `VAYORI_PLUGIN_CHECK_FORCE=1`.
+  - Silent when there's nothing to report - it only ever speaks up when
+    it's actually found something, so it's not noise on every build.
+- **Wired in through a zsh hook**, not an alias, since aliases get
+  skipped when a command's prefixed with `sudo`. The hook watches for
+  rebuild-shaped commands and runs a quick, 10-second-capped check right
+  before letting the real command through - so the only thing anyone
+  ever has to do is run the normal rebuild command, and a slow or dead
+  network adds at most 10 seconds, never more.
