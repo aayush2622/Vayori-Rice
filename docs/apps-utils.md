@@ -207,6 +207,15 @@ picks a random logo out of `modules/apps/utils/terminal/images/` every
 time you open a shell, and falls back to its own default if that folder
 ever ends up empty.
 
+- **The logo picker used to `find` the images folder fresh on every
+  single new shell**, piped through `shuf` - two subprocesses and a real
+  filesystem walk paid on every terminal open for a folder that's
+  entirely static within the flake. Now it's a plain bash array, baked
+  in at build time (`fastfetchImagePaths`, computed once from
+  `builtins.readDir`) - same "pick a random one" behavior, same set of
+  images, just an array index instead of a filesystem scan. Checked the
+  real generated `.zshrc` directly to confirm all the actual image paths
+  ended up baked in correctly, not just that the Nix side evaluated.
 - **Starship replaced a hand-rolled prompt.** The old one was a manual
   `precmd` hook that could only show the current branch - no dirty/staged/
   ahead-behind state, nothing. Starship fully owns prompt rendering once
@@ -276,3 +285,16 @@ opaque `.json` files, so it reads like everything else in this repo.
   container-by-container rather than 1:1). It's not a home-manager file
   either - matugen owns it outright and rewrites it on every wallpaper
   change, same as everything else it touches in this repo.
+- **The shared font now actually reaches Discord's own chrome, not just
+  colors.** Discord/Vencord's UI reads its font off three CSS custom
+  properties (`--font-primary`, `--font-display`, `--font-code`) that
+  nothing was ever setting - real gap, Vesktop was matugen-themed for
+  color the whole time but never picked up the shared font choice at
+  all. The vesktop matugen template ([Matugen.nix](desktop.md#modulesdesktopmatugennix))
+  went from a plain string to a function taking the font, same pattern
+  [AndroidStudio.nix](apps-development.md#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)
+  already used for its own matugen template - Vesktop.nix just needed
+  `vayoriTheme` added to its own module signature (it never had it
+  before) to actually call it with something. Confirmed against the real
+  built CSS file: all three properties resolve to the actual configured
+  font, not a placeholder.

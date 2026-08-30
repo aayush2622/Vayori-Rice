@@ -29,6 +29,25 @@ activation. Seeding once and then leaving it alone lets DMS actually own
 the file going forward, same as it would with none of this repo's config
 involved at all.
 
+**`DMS_ENABLE_GTK4_REFRESH=1`** on the `dms` systemd user service - not
+a `programs.dank-material-shell` option, since upstream doesn't expose
+one for this; overridden straight on the generated
+`systemd.user.services.dms` unit instead, which merges cleanly with
+whatever that module already sets (confirmed against the real built
+unit file - `Environment=` sits alongside the existing `ExecStart=`/
+`Restart=`, nothing clobbered). Found by reading DMS's own Go source,
+not guessed: on every wallpaper/theme change, DMS deliberately flips
+`org.gnome.desktop.interface color-scheme` to the opposite value and
+back 400ms later, specifically because a plain GTK theme change doesn't
+make already-running GTK4/libadwaita apps (Nautilus included) reload
+their CSS, but this toggle-and-restore round trip does. That whole
+mechanism is opt-in, off by default, behind exactly this environment
+variable - DMS's own comment calls out *why* it defaults off (some apps
+following the portal's color-scheme, Chromium named specifically, can
+drop the restore signal mid-repaint and get stuck in the wrong mode),
+but the trade-off favors "Nautilus's own chrome actually reflects the
+current wallpaper without a restart" here.
+
 **Section order in the settings block**, if you're hunting for
 something: theme, compositor, weather, animation, blur, wallpaper, bar
 widgets, control center, workspaces, media, greeter, launcher, dashboard,
@@ -156,22 +175,34 @@ change the built output at all.
 ## `modules/desktop/Fonts.nix` / `Portals.nix`
 
 - One font package for terminal/bar glyphs, one for DMS's icon font.
-- Two portal backends: one handles file pickers/screenshots/screencast
-  for niri, the other's the GTK file chooser Nautilus and friends use.
-- **Portal routing comes straight from niri's own shipped config**, not
-  a hand-written list - niri's package ships its own portal config file
-  that routes a couple of things (access prompts, notifications, secrets)
-  more sensibly than the old hand-rolled version did. One correction
-  worth flagging honestly: that shipped file's screen-share/screenshot
-  routing is *identical* to what this repo already had, so switching to
-  it does **not** fix the screencast issue some other distros hit - that
-  turned out to be a packaging difference elsewhere, not something this
-  change touches. The real benefit here is just inheriting niri's own
-  upstream routing going forward instead of a hand-guessed one, not a
-  screen-share fix. Also worth being upfront about: this was verified by
-  reading the actual shipped file and checking the config resolves
-  correctly, not by testing an actual live screen share, which isn't
-  really possible in this environment.
+- Two portal backends registered: `xdg-desktop-portal-gnome` (needed for
+  screencast/screenshot - niri itself doesn't implement those, and the
+  plain GTK portal can't either) and `xdg-desktop-portal-gtk` (the
+  generic file-chooser/settings backend most non-GNOME compositors use).
+- **Explicit per-interface routing via `xdg.portal.config.niri`** -
+  `default = [ "gtk" ]`, with `ScreenCast`/`Screenshot` specifically
+  routed to `gnome`. This used to rely on `configPackages = [ pkgs.niri
+  ];`, on the assumption niri's own package ships a portal config file
+  the way some other compositor packages do. **That assumption was
+  wrong, checked for real**: the actual built `pkgs.niri` output has no
+  `share/xdg-desktop-portal/` directory at all, no `.conf` file, nothing
+  - so that line was silently a no-op the whole time, and portal backend
+  resolution was left to whatever xdg-desktop-portal's own default
+  arbitration happened to pick between two registered, un-prioritized
+  backends. That's a genuinely well-documented performance problem, not
+  just a correctness nitpick: `xdg-desktop-portal-gnome` expects a real
+  GNOME Shell underneath it, and GTK4/libadwaita apps (Nautilus very
+  much included) query the portal's `Settings` interface on every
+  single launch for color-scheme/accent-color - if that call lands on
+  the GNOME backend instead of GTK under a non-GNOME compositor, it can
+  stall for a real, user-visible amount of time before falling through.
+  Widely reported for exactly this reason on sway/hyprland/niri setups,
+  and niri's own wiki independently documents the exact fix now in
+  place here: default to `gtk`, carve out just `ScreenCast`/`Screenshot`
+  for `gnome`. Verified the corrected config actually resolves
+  (`nix eval`'d against the real option schema, not guessed) - not
+  verified against a live screen-share/screenshot session, which isn't
+  possible in this environment.
 
 **One font setting drives everything declarative**: system font, GTK app
 text, terminal, and DMS's own UI all read the same shared font option.
@@ -242,6 +273,28 @@ opt-in pick, it's just part of what this desktop *is*.
   own default stylesheet - one line importing the generated file is what
   actually wires it up, and it also happens to be the exact string DMS
   itself checks for before firing live refresh signals on theme changes.
+  **That check turned out to be checking the wrong thing, though** - a
+  real, previously-missed bug, found by reading DMS's own Go source
+  rather than trusting the CSS content alone was enough. DMS decides
+  whether to fire *any* live refresh at all (GTK3 theme reload, GTK4 CSS
+  reload, accent-color sync - all three, gated by the same one check) by
+  inspecting `~/.config/gtk-3.0/gtk.css`: if it's a symlink (which is
+  exactly what `home.file`/`gtk3.extraCss` always produces), DMS checks
+  whether the *symlink's target path* contains the literal string
+  `"dank-colors.css"` - not the file's content. Using `gtk3.extraCss`/
+  `gtk4.extraCss` directly, that target path is home-manager's own
+  generic `hm_gtk3.0gtk.css`, which never contains that substring -
+  confirmed against the real built symlink, not assumed. So the whole
+  live-refresh pipeline was silently gated off this entire time,
+  regardless of anything else configured (including
+  `DMS_ENABLE_GTK4_REFRESH` - see [Dms.nix](#modulesdesktopdmsnix), which
+  genuinely helps, but was never getting the chance to run at all). Fixed
+  by bypassing `gtk3.extraCss`/`gtk4.extraCss` and declaring the files
+  directly via `home.file.<path>.source = pkgs.writeText
+  "dank-colors.css" ...` instead - same content, but now the symlink
+  target is *named* `dank-colors.css`, which is exactly the string DMS
+  is looking for. Confirmed against the real built symlink again after
+  the fix.
 - **Qt theming deliberately has no separate style override set.** An
   earlier version forced every Qt app onto a totally different theming
   engine regardless of the palette settings below, and matugen has no
@@ -269,6 +322,25 @@ opt-in pick, it's just part of what this desktop *is*.
   whichever preset color is closest to the current accent and runs the
   recoloring tool with it, no `sudo` needed since it's editing the
   writable copy directly as the regular user.
+- **The recoloring tool's own `-u` (update icon caches) flag was
+  silently doing nothing.** Checked its actual script: `-u` shells out to
+  `gtk-update-icon-cache`, a `gtk3` binary this repo never installed
+  anywhere - `papirus-folders` itself doesn't depend on it (confirmed via
+  `nix why-depends`), so it was missing from `$PATH` entirely. The
+  recoloring itself was working the whole time - the underlying icon
+  files really were getting rewritten - but with nothing ever
+  invalidating the cached icon index, every app (Nautilus very much
+  included) just kept reading the stale one forever. `pkgs.gtk3` added
+  alongside `papirus-folders`, scoped to the same Papirus-only block.
+- **Nautilus's own window chrome not updating live is a separate,
+  GTK4-specific gap, not this same bug.** The CSS-import mechanism above
+  is real and does work, but modern libadwaita (GTK4) deliberately
+  doesn't hot-reload from a plain CSS re-import the way GTK3 apps do -
+  DMS's own upstream source confirms this in a comment, and ships a
+  specific fix for it (a deliberate color-scheme toggle-and-restore
+  round trip) that's opt-in behind an environment variable, off by
+  default. See [Dms.nix](#modulesdesktopdmsnix) for where that gets
+  turned on.
 
 ---
 

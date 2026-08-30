@@ -1,5 +1,5 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps.Vesktop = { pkgs, config, ... }:
+  flake.homeModules.apps.Vesktop = { pkgs, config, vayoriTheme, ... }:
   let
     vesktopSettings = {
       discordBranch = "stable";
@@ -246,7 +246,7 @@
       vencord.settings = vencordSettings // { plugins = vencordPlugins; };
     };
 
-    home.file.".config/matugen/templates/vesktop-colors.css".text = self.matugenTemplates.vesktop;
+    home.file.".config/matugen/templates/vesktop-colors.css".text = self.matugenTemplates.vesktop vayoriTheme.font;
 
     vayori.matugenTemplates.vesktop = ''
       [templates.vesktop]

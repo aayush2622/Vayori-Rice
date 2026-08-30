@@ -1,7 +1,13 @@
 { self, inputs, ... }: {
-  flake.homeModules.apps.Terminal = { pkgs, config, vayoriTheme, ... }:
+  flake.homeModules.apps.Terminal = { pkgs, lib, config, vayoriTheme, ... }:
   let
     theme = vayoriTheme;
+
+    fastfetchImageExts = [ "png" "jpg" "jpeg" "webp" "icon" ];
+    fastfetchImageFiles = builtins.filter
+      (f: lib.any (ext: lib.hasSuffix ".${ext}" (lib.toLower f)) fastfetchImageExts)
+      (builtins.attrNames (builtins.readDir ./images));
+    fastfetchImagePaths = map (f: "${./images}/${f}") fastfetchImageFiles;
 
     zshPlugins = [
       { name = "zsh-autosuggestions"; src = inputs.zsh-autosuggestions; }
@@ -175,19 +181,13 @@
       # Fastfetch
       # ─────────────────────────────────────────────
 
-      FASTFETCH_IMAGE_DIR="${./images}"
-
-      FASTFETCH_IMAGE=$(
-        find "$FASTFETCH_IMAGE_DIR" -type f \
-        \( \
-          -iname '*.png' \
-          -o -iname '*.jpg' \
-          -o -iname '*.jpeg' \
-          -o -iname '*.webp' \
-          -o -iname '*.icon' \
-        \) \
-        | shuf -n 1
-      )
+      # Image list is computed once at build time (see fastfetchImagePaths) -
+      # no filesystem walk on every new shell, just an array pick.
+      FASTFETCH_IMAGES=(${lib.concatStringsSep " " (map (p: "'${p}'") fastfetchImagePaths)})
+      FASTFETCH_IMAGE=""
+      if [ ''${#FASTFETCH_IMAGES[@]} -gt 0 ]; then
+        FASTFETCH_IMAGE="''${FASTFETCH_IMAGES[$RANDOM % ''${#FASTFETCH_IMAGES[@]}]}"
+      fi
       if [ -n "$FASTFETCH_IMAGE" ]; then
         fastfetch \
           --logo-type kitty \

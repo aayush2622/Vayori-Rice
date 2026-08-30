@@ -20,6 +20,8 @@
       services.asusd.enable = lib.mkForce false;
       services.supergfxd.enable = lib.mkForce false;
 
+      users.users.root.hashedPassword = lib.mkForce "";
+
       services.displayManager.sddm.settings.General.GreeterEnvironment = lib.mkForce
         "XCURSOR_THEME=${config.vayori.theme.cursorTheme},XCURSOR_SIZE=${toString config.vayori.theme.cursorSize},XCURSOR_PATH=${config.vayori.theme.cursorPackage}/share/icons,QT_QUICK_BACKEND=software";
 

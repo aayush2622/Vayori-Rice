@@ -31,6 +31,7 @@ deep dive.
 
 **System**
 - [system/DevTooling.nix](system.md#modulessystemdevtoolingnix)
+- [system/Zram.nix](system.md#modulessystemzramnix)
 - [system/GrubTheme.nix](system.md#modulessystemgrubthemenix)
 
 **Apps - development**

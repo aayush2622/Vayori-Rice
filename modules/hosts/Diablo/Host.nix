@@ -12,6 +12,7 @@
       self.nixosModules.SddmTheme
       self.nixosModules.GrubTheme
       self.nixosModules.DevTooling
+      self.nixosModules.Zram
       self.nixosModules.VmTesting
       self.nixosModules.PluginUpdateCheck
 

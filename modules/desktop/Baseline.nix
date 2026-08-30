@@ -52,9 +52,12 @@
             size = theme.fontSize;
           };
 
-          gtk3.extraCss = ''@import url("dank-colors.css");'';
-          gtk4.extraCss = ''@import url("dank-colors.css");'';
         };
+
+        home.file.".config/gtk-3.0/gtk.css".source =
+          pkgs.writeText "dank-colors.css" ''@import url("dank-colors.css");'';
+        home.file.".config/gtk-4.0/gtk.css".source =
+          pkgs.writeText "dank-colors.css" ''@import url("dank-colors.css");'';
         home.pointerCursor = {
           enable = true;
           gtk.enable = true;
@@ -101,7 +104,7 @@
       }
 
       (lib.mkIf isPapirus {
-        home.packages = [ pkgs.papirus-folders ];
+        home.packages = [ pkgs.papirus-folders pkgs.gtk3 ];
 
         home.activation.installPapirusIconTheme = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
           iconsDir="$HOME/${papirusIconsDir}"

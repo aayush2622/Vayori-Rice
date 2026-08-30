@@ -77,13 +77,18 @@ in {
         FCC_CONFIG_DIR=${lib.escapeShellArg fccConfigDir}
 
         run mkdir -p "$FCC_CONFIG_DIR"
-
+        run chown -R "$(id -u):$(id -g)" "$FCC_CONFIG_DIR"
         if [ ! -f "$FCC_CONFIG_DIR/.env" ]; then
           run sh -c "cat ${fccSeedEnvFile} > '$FCC_CONFIG_DIR/.env'"
-          SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
-          NVIDIA_KEY="$(grep -m1 '^NVIDIA_NIM_API_KEY=' "$SECRETS_FILE" 2>/dev/null | cut -d= -f2- || true)"
-          run sh -c "printf 'NVIDIA_NIM_API_KEY=%s\n' \"\$1\" >> '$FCC_CONFIG_DIR/.env'" -- "$NVIDIA_KEY"
         fi
+
+        SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
+        NVIDIA_KEY="$(grep -m1 '^NVIDIA_NIM_API_KEY=' "$SECRETS_FILE" 2>/dev/null | cut -d= -f2- || true)"
+        ENV_TMP="$(mktemp)"
+        grep -v '^NVIDIA_NIM_API_KEY=' "$FCC_CONFIG_DIR/.env" > "$ENV_TMP"
+        sh -c "printf 'NVIDIA_NIM_API_KEY=%s\n' \"\$1\" >> \"\$2\"" -- "$NVIDIA_KEY" "$ENV_TMP"
+        run cp "$ENV_TMP" "$FCC_CONFIG_DIR/.env"
+        rm -f "$ENV_TMP"
 
         CLAUDE_JSON=${lib.escapeShellArg claudeJsonFile}
 

@@ -207,10 +207,13 @@
       "WindowText"="{{ colors.on_background.default.red }} {{ colors.on_background.default.green }} {{ colors.on_background.default.blue }}"
     '';
 
-    vesktop = ''
+    vesktop = font: ''
       @import url('https://mwittrien.github.io/BetterDiscordAddons/Themes/DiscordRecolor/DiscordRecolor.css');
 
       :root {
+        --font-primary: "${font}", sans-serif !important;
+        --font-display: "${font}", sans-serif !important;
+        --font-code: "${font}", monospace !important;
         --accentcolor: {{colors.primary.default.red}},{{colors.primary.default.green}},{{colors.primary.default.blue}};
         --accentcolor2: {{colors.primary_container.default.red}},{{colors.primary_container.default.green}},{{colors.primary_container.default.blue}};
         --linkcolor: {{colors.primary.default.red}},{{colors.primary.default.green}},{{colors.primary.default.blue}};

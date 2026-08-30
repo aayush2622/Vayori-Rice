@@ -136,6 +136,35 @@ exactly like a broken driver, isn't one.
   claim the same D-Bus name for power profiles, so running both just
   means whichever starts second silently loses.
 
+**Swap and hibernate now actually use hardware that was already sitting
+there.** This machine already has a real 16.8GB swap *partition*
+(`nvme0n1p5`) from the original dual-boot install - `swapDevices` just
+never referenced it, so NixOS ran with zero swap of its own the whole
+time. Checked real numbers before touching anything: 15GiB RAM, that
+partition sized comfortably above it, so it's genuinely enough for a
+full hibernation image with no new disk space carved out anywhere -
+worth being deliberate about on a btrfs partition that's already been
+through one real "disk full" incident this project.
+
+- `swapDevices` points at it by UUID, same convention as the filesystem
+  entries right above it.
+- `boot.resumeDevice` is set explicitly to the same UUID - NixOS would
+  actually auto-detect this from `swapDevices` alone since it's a plain
+  partition (no swap*file* offset math needed), but spelling it out
+  means the hibernate wiring reads as an intentional feature here, not
+  an accident of what happened to be declared. Confirmed for real: the
+  built system's own `kernel-params` file has `resume=` pointing at the
+  exact right UUID, and `hardware.nvidia.powerManagement.enable` (already
+  on, a few lines up) is the same setting that makes the proprietary
+  driver actually save/restore GPU state across a hibernate cycle - this
+  slots into something that was already half set up for it.
+- **`compress=zstd` on both btrfs mounts** (`/` and `/home`) - real,
+  low-risk win on two fronts at once: less disk I/O for anything
+  compressible (most config files, source code, a lot of what's actually
+  in `/home`), and some space back on a disk that's been genuinely tight
+  more than once. Confirmed in the real built `/etc/fstab`, not just the
+  Nix option.
+
 ---
 
 ## `modules/hosts/<name>/Vm.nix`
@@ -163,6 +192,23 @@ the real deployed system never sees any of this:
    which means it's genuinely tied to this one dev machine's distro
    layout, and would need swapping back to plain `qemu_kvm` on an actual
    NixOS host, where the problem doesn't exist in the first place.
+4. **`users.users.root.hashedPassword = lib.mkForce ""` - passwordless
+   root, VM-only.** Added while actually using this VM to verify a
+   different fix (a portal misconfiguration) for real instead of trusting
+   generated config alone - `mutableUsers = false` plus no explicit root
+   password left the console `sulogin`-locked with no way in at all,
+   real or synthetic. Same reasoning as everything else in this file:
+   pure testing convenience, scoped to `virtualisation.vmVariant` only,
+   the real machine's root account is completely untouched by it.
+
+Worth knowing if you use this VM for its own sake: it genuinely boots to
+a real login and a working shell this way, and that's how a real,
+previously-unknown bug got caught here too - `config.system.build.vm`
+flat out failed to evaluate before this session's fixes, over an
+unrelated `gfxmodeBios` conflict between
+[GrubTheme.nix](system.md#modulessystemgrubthemenix) and this module's
+own upstream `qemu-vm.nix` machinery. Static config generation checks
+don't catch that kind of thing - only an actual build (or boot) does.
 
 ---
 
@@ -183,6 +229,19 @@ entry can contain.
   first, generically - some app's activation script (ZenBrowser's mod/
   profile fetch, currently) needs it, and without this it can race the
   network interface coming up during boot.
+- **`TimeoutStartSec = "180sec"`** - was `30sec`, found genuinely too
+  tight by actually booting a VM from this config rather than trusting
+  it would be fine: a full first-time activation (every app's `home.
+  activation` script running for real - session-state symlinking,
+  secrets syncing, matugen templates, DMS theme install, all of it,
+  across two users) hit the old 30-second wall and both
+  `home-manager-ash`/`home-manager-random` services were killed mid-run
+  and marked failed, confirmed by checking what had and hadn't been
+  written yet (`secrets.env` existed, `session/` symlinking hadn't even
+  started). 180s gives real headroom for a heavy first run or a slow
+  disk without weakening the point of having a timeout at all - a
+  genuinely hung activation still gets caught, just not one that's
+  simply taking a while.
 
 **Also where the secrets file gets seeded**, one activation script for
 every user (`seedVayoriSecrets`): if `~/.config/vayori/session/secrets.env`

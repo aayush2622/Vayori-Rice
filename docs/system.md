@@ -23,6 +23,22 @@ grant anything on its own anymore, it's basically a fossil.
 
 ---
 
+## `modules/system/Zram.nix`
+
+One line - `zramSwap.enable = true;` - and the upstream module's own
+defaults (50% of RAM, `zstd`, priority `5`) already do the right thing,
+confirmed by actually reading that module's source rather than assuming:
+`zstd` is both fast and well-compressed, and priority `5` beats a plain
+disk swap entry's default, so the RAM-backed swap gets used first and
+[Diablo's real disk swap partition](core.md#moduleshostsnamehardwarenix)
+only picks up genuine overflow. Split out into its own file under
+`system/`, not folded into `_hardware.nix`, since nothing about it is
+actually hardware-specific - any host with enough RAM benefits the same
+way, and a second host defined later gets it for free instead of needing
+this copied in.
+
+---
+
 ## `modules/system/GrubTheme.nix`
 
 `elegant-grub2-themes` ([vinceliuice/Elegant-grub2-themes](https://github.com/vinceliuice/Elegant-grub2-themes))
@@ -49,5 +65,18 @@ hand-rolled packaging like the old theme needed.
   cheers), and `git+https://` talks to git directly instead of going
   through that API, so it just works regardless. Had to override
   upstream's own nested source input the same way for the same reason.
+- **`gfxmodeBios` is force-set to match `screen = "1080p"` explicitly**,
+  duplicating a value the theme module already derives internally - not
+  cosmetic. `screen` sets `boot.loader.grub.gfxmodeBios` to
+  `1920x1080,auto` under the hood, but `virtualisation.vmVariant` (the
+  machinery behind `nixos-rebuild build-vm` and
+  [Vm.nix](core.md#moduleshostsnamevmnix)) sets its own plain `1024x768`
+  default for the *same* option - two plain-priority definitions,
+  genuinely conflicting, and `config.system.build.vm` flat out failed to
+  evaluate because of it. Not a hypothetical: hit this for real trying
+  to build a VM to verify a different fix, confirmed it had nothing to
+  do with that fix, and confirmed the `mkForce` here resolves it cleanly
+  via the real option's resolved value. Harmless inside a VM too - QEMU's
+  virtual display has no trouble with 1920x1080.
 
 ---

@@ -230,7 +230,7 @@ modules/
     Niri.nix / Dms.nix / Fonts.nix / Portals.nix / Baseline.nix (GTK/Qt theming every user gets)
     Matugen.nix                 shared matugen template content, one attr per themed app
   system/                     system-level infra unrelated to the desktop
-    DevTooling.nix (docker/libvirtd/adbusers) / GrubTheme.nix
+    DevTooling.nix (docker/libvirtd/adbusers) / Zram.nix / GrubTheme.nix
   apps/                       opt-in per-user (home-manager) modules, picked via vayori.apps - one folder each
     development/                editors, dev-tools, FreeClaudeCode
       editors/                     Vscode, AndroidStudio, Zed - one folder each
