@@ -1,5 +1,5 @@
 { self, ... }: {
-  flake.homeModules.apps.Zed = { pkgs, lib, config, vayoriTheme, vayoriApps, ... }:
+  flake.homeModules.apps.Zed = { pkgs, lib, vayoriTheme, vayoriApps, ... }:
   let
     enabledLanguages = lib.filterAttrs (name: _: builtins.elem name vayoriApps) self.devLanguages;
     languageZed = lib.mapAttrsToList (_: l: l.zed or { }) enabledLanguages;
@@ -35,7 +35,7 @@
       ui_font_size = 16;
       buffer_font_size = 15;
       base_keymap = "JetBrains";
-      theme = "Matugen";
+      theme = "DankShell Dark";
       session.trust_all_worktrees = true;
       agent = {
         default_model = {
@@ -61,8 +61,8 @@
 
     home.activation.zedWakatimeKey = lib.hm.dag.entryAfter [ "writeBoundary" "seedVayoriSecrets" "zedSettingsActivation" ] ''
       SETTINGS_FILE="$HOME/.config/zed/settings.json"
-      SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
-      WAKATIME_KEY="$(grep -m1 '^WAKATIME_API_KEY=' "$SECRETS_FILE" 2>/dev/null | cut -d= -f2- || true)"
+      SECRETS_FILE="$HOME/.config/vayori/session/secrets.json"
+      WAKATIME_KEY="$(${pkgs.jq}/bin/jq -r '.WAKATIME_API_KEY // empty' "$SECRETS_FILE" 2>/dev/null || true)"
       SETTINGS_TMP="$(mktemp)"
 
       ${pkgs.jq}/bin/jq \
@@ -72,14 +72,6 @@
         && run cp "$SETTINGS_TMP" "$SETTINGS_FILE"
 
       rm -f "$SETTINGS_TMP"
-    '';
-
-    home.file.".config/matugen/templates/zed-theme.json".text = self.matugenTemplates.zed;
-
-    vayori.matugenTemplates.zed = ''
-      [templates.zed]
-      input_path = '${config.home.homeDirectory}/.config/matugen/templates/zed-theme.json'
-      output_path = '${config.home.homeDirectory}/.config/zed/themes/matugen.json'
     '';
   };
 }

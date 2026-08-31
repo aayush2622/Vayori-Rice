@@ -29,24 +29,30 @@ activation. Seeding once and then leaving it alone lets DMS actually own
 the file going forward, same as it would with none of this repo's config
 involved at all.
 
-**`DMS_ENABLE_GTK4_REFRESH=1`** on the `dms` systemd user service - not
-a `programs.dank-material-shell` option, since upstream doesn't expose
-one for this; overridden straight on the generated
-`systemd.user.services.dms` unit instead, which merges cleanly with
-whatever that module already sets (confirmed against the real built
-unit file - `Environment=` sits alongside the existing `ExecStart=`/
-`Restart=`, nothing clobbered). Found by reading DMS's own Go source,
-not guessed: on every wallpaper/theme change, DMS deliberately flips
-`org.gnome.desktop.interface color-scheme` to the opposite value and
-back 400ms later, specifically because a plain GTK theme change doesn't
-make already-running GTK4/libadwaita apps (Nautilus included) reload
-their CSS, but this toggle-and-restore round trip does. That whole
-mechanism is opt-in, off by default, behind exactly this environment
-variable - DMS's own comment calls out *why* it defaults off (some apps
-following the portal's color-scheme, Chromium named specifically, can
-drop the restore signal mid-repaint and get stuck in the wrong mode),
-but the trade-off favors "Nautilus's own chrome actually reflects the
-current wallpaper without a restart" here.
+**`DMS_ENABLE_GTK4_REFRESH` was tried and reverted.** DMS's own Go source
+(`matugen.go`) has this opt-in, off by default: on every theme change it
+deliberately flips `org.gnome.desktop.interface color-scheme` to the
+opposite value and back 400ms later, because a plain GTK theme change
+doesn't make already-running GTK4/libadwaita apps (Nautilus included)
+reload their CSS, but this toggle-and-restore round trip does. It got
+turned on here for exactly that Nautilus benefit - but DMS's own comment
+on the function names the actual cost: apps that follow the portal's
+color-scheme signal instead of GTK's theme-name signal (Chromium named
+specifically, but any Firefox-family browser reads the same
+`org.freedesktop.appearance` portal key) "can drop the restore signal
+mid-repaint and latch the wrong mode." That's exactly what started
+happening to Zen Browser here - live matugen colors stopped applying and
+needed a full restart to pick back up, immediately after this got
+turned on. Confirmed by re-reading the same source comment against the
+symptom rather than guessing: this repo doesn't ship anything
+zenbrowser-specific in the refresh path (DMS's `zenbrowser.toml`
+matugen target just rewrites `~/.config/DankMaterialShell/zen.css`
+unconditionally on every run, symlinked to Zen's `userChrome.css` -
+that part was never broken), so the color-scheme round trip was the
+only thing in the chain new enough to be the cause. Left off; Nautilus
+goes back to needing a manual GTK theme reselect (or reopen) to pick up
+a new wallpaper's colors immediately, which is the trade DMS's own
+maintainers made by defaulting this off in the first place.
 
 **Section order in the settings block**, if you're hunting for
 something: theme, compositor, weather, animation, blur, wallpaper, bar
@@ -55,6 +61,41 @@ fonts, notepad, sounds, power, matugen (per-app toggles - also themes
 niri's own window borders), dock, notifications, lock screen, OSD, power
 menu, updater, displays, desktop clock, system monitor, desktop widgets,
 frame.
+
+**Vesktop and Zed use DMS's own built-in themes, not a custom one.**
+This repo used to ship its own matugen templates for both (a
+DiscordRecolor-based Vesktop theme, a hand-written Zed theme), completely
+redundant with DMS's own `vesktop`/`zed` matugen targets - both were
+running on every theme change, writing to different, unused output paths
+(confirmed by reading DMS's own Go template registry:
+`~/.config/vesktop/themes/dank-discord.css`,
+`~/.config/zed/themes/dank-zed-theme.json`). Rather than keep two
+theming paths per app, this repo's own templates were dropped and DMS's
+own are used directly:
+- **Zed**: `theme = "DankShell Dark"` in
+  [Zed.nix](apps-development.md#modulesappsdevelopmenteditorszedzednix)
+  references the theme name straight out of DMS's own
+  `dank-zed-theme.json` (four variants ship in that file - `DankShell
+  Dark`/`Light`, plus `Transparent` variants - `Dark` is what's picked
+  here). Zed just scans `~/.config/zed/themes/*.json` for a matching
+  `name`, so this needs nothing beyond the string matching what DMS
+  writes.
+- **Vesktop**: `matugenTemplateVesktop = true` lets DMS keep writing
+  `dank-discord.css` (the well-known
+  [midnight-discord](https://github.com/refact0r/midnight-discord)
+  community theme, matugen-recolored), but Vesktop only *auto-loads*
+  a theme through QuickCSS, not the `themes/` folder DMS writes to -
+  same class of "needs a manual toggle" gap as GTK's own button, just
+  for Vesktop's Settings > Themes tab instead. [Vesktop.nix](apps-utils.md#modulesappsutilsvesktopvesktopnix)'s
+  `home.activation.applyDmsVesktopTheme` writes
+  `~/.config/vesktop/settings/quickCss.css` as `@import
+  url("../themes/dank-discord.css");` plus a small `--font` override
+  (kept, so Vesktop still follows this repo's font choice like every
+  other app does) - a real plain file via `install`, deliberately not a
+  `home.file` symlink into the Nix store, same reasoning as the GTK4
+  `@import` fix: a relative CSS import needs to resolve against the
+  app's own real config directory, not wherever a symlink's target
+  happens to sit.
 
 **Third-party plugins** come from a community registry that auto-generates
 an option per plugin, off by default, opt-in one at a time. A widget-type
@@ -170,6 +211,27 @@ The keybind list lives as its own named binding instead of buried three
 levels deep in the config attrset - purely for readability, doesn't
 change the built output at all.
 
+**`environment { QT_QPA_PLATFORMTHEME "qt6ct"; QT_QPA_PLATFORMTHEME_QT6
+"qt6ct"; }`** - straight from DMS's own docs, which specifically call
+out niri as needing this set at the compositor level, not left to
+generic session-variable propagation. Worth explaining why that's true
+rather than redundant: home-manager's own `qt.platformTheme.name =
+"qtct"` ([Baseline.nix](#modulesdesktopbaselinenix)) only ever sets
+`QT_QPA_PLATFORMTHEME` - checked the actual module source, there's no
+`QT_QPA_PLATFORMTHEME_QT6` handling in it at all, for any platform theme
+choice. Without it, Qt6 apps have nothing telling them to load the qt6ct
+platform plugin specifically, so qt6ct.conf's matugen color scheme was
+never actually reaching them - Qt5 apps were fine, Qt6 ones weren't,
+silently. This overrides the value for anything niri itself spawns
+(which is effectively every graphical app in this session), taking
+priority over home-manager's own `qt5ct` value for that specific case -
+kept both rather than reconciling them, since `qt.platformTheme` still
+does real, separate work (installs the actual qt5ct/qt6ct packages,
+sets `QT_STYLE_OVERRIDE`, `QT_PLUGIN_PATH`, `QML2_IMPORT_PATH`).
+Verified against the real built `niri-config.kdl`, not assumed - it
+renders as a genuine `environment { ... }` block, matching niri's own
+documented config syntax exactly.
+
 ---
 
 ## `modules/desktop/Fonts.nix` / `Portals.nix`
@@ -268,33 +330,52 @@ opt-in pick, it's just part of what this desktop *is*.
   they just don't exist anywhere for a fresh account. Session variables
   for the same paths get exported too, for the handful of apps that read
   those directly instead of parsing the file themselves.
-- **GTK theming works through a plain CSS import**, since DMS always
-  writes its color file but GTK itself never auto-loads anything but its
-  own default stylesheet - one line importing the generated file is what
-  actually wires it up, and it also happens to be the exact string DMS
-  itself checks for before firing live refresh signals on theme changes.
-  **That check turned out to be checking the wrong thing, though** - a
-  real, previously-missed bug, found by reading DMS's own Go source
-  rather than trusting the CSS content alone was enough. DMS decides
-  whether to fire *any* live refresh at all (GTK3 theme reload, GTK4 CSS
-  reload, accent-color sync - all three, gated by the same one check) by
-  inspecting `~/.config/gtk-3.0/gtk.css`: if it's a symlink (which is
-  exactly what `home.file`/`gtk3.extraCss` always produces), DMS checks
-  whether the *symlink's target path* contains the literal string
-  `"dank-colors.css"` - not the file's content. Using `gtk3.extraCss`/
-  `gtk4.extraCss` directly, that target path is home-manager's own
-  generic `hm_gtk3.0gtk.css`, which never contains that substring -
-  confirmed against the real built symlink, not assumed. So the whole
-  live-refresh pipeline was silently gated off this entire time,
-  regardless of anything else configured (including
-  `DMS_ENABLE_GTK4_REFRESH` - see [Dms.nix](#modulesdesktopdmsnix), which
-  genuinely helps, but was never getting the chance to run at all). Fixed
-  by bypassing `gtk3.extraCss`/`gtk4.extraCss` and declaring the files
-  directly via `home.file.<path>.source = pkgs.writeText
-  "dank-colors.css" ...` instead - same content, but now the symlink
-  target is *named* `dank-colors.css`, which is exactly the string DMS
-  is looking for. Confirmed against the real built symlink again after
-  the fix.
+- **GTK theming is wired up by literally running DMS's own `gtk.sh`**,
+  not by hand-declaring the CSS files - `home.activation.applyDmsGtkColors`
+  calls `${config.programs.dank-material-shell.package}/share/quickshell/dms/scripts/gtk.sh`
+  directly, the exact script DMS's own Settings -> Theme -> "Apply GTK
+  Colors" button runs (`Theme.qml`'s `applyGtkColors()`, read straight
+  from DMS's source), on every `home-manager switch`. Getting here took
+  two real bugs, both found by reading DMS's Go/QML source rather than
+  guessing:
+  1. DMS gates *all* live theme refresh (GTK3 reload, GTK4 CSS reload,
+     accent-color sync) behind one check: is `~/.config/gtk-3.0/gtk.css`
+     a symlink whose *target path* contains the literal string
+     `"dank-colors.css"`? A plain `gtk3.extraCss`/`gtk4.extraCss`
+     symlinks to home-manager's own generic `hm_gtk3.0gtk.css`, which
+     never matches - confirmed against the real built symlink. That
+     silently gated off live refresh entirely, regardless of anything
+     else configured.
+  2. Fixing #1 by hand-declaring `gtk.css` as a `home.file` symlink to a
+     `pkgs.writeText "dank-colors.css" ...` store path made the *name*
+     match, so refresh signals started firing - but Nautilus still
+     needed a manual "Apply GTK Colors" click to actually pick up new
+     colors. The reason: DMS's own matugen pipeline writes live colors
+     to a plain, DMS-owned `~/.config/gtk-{3,4}.0/dank-colors.css`
+     *sibling* file on every theme change (`RunUnconditionally: true`
+     in `matugen.go`'s template registry) - `gtk.css` is only ever
+     supposed to *reference* that sibling, not contain baked colors
+     itself. A `home.file` symlink into the read-only Nix store can
+     never be that reference, no matter what content or name it's
+     given - confirmed by reading `gtk.sh` itself, which does exactly
+     two things: symlinks `gtk-3.0/gtk.css -> dank-colors.css` (a bare
+     relative name, resolved against the sibling file) and prepends an
+     `@import url("dank-colors.css");` line to a real, non-symlinked
+     `gtk-4.0/gtk.css`. It also fixes up a `gtk-3.0/assets` symlink to
+     `adw-gtk3`'s check/radio/slider glyphs, without which GTK3
+     checkboxes render as solid blocks - a second thing this repo's own
+     static approach never handled at all.
+
+  Running the real script instead of reimplementing its logic means
+  this stays correct across DMS updates for free, and running it on
+  every activation (guarded on `dank-colors.css` already existing, so a
+  brand new account with no theme applied yet doesn't fail the whole
+  rebuild) means the fix is what used to be a manual button click now
+  happens automatically every time. Verified end-to-end against the
+  real installed script with a scratch `$HOME` and a fake
+  `dank-colors.css`: produces the identical `gtk.css -> dank-colors.css`
+  symlink, `assets` symlink, and `@import` line the real button
+  produces.
 - **Qt theming deliberately has no separate style override set.** An
   earlier version forced every Qt app onto a totally different theming
   engine regardless of the palette settings below, and matugen has no

@@ -82,11 +82,19 @@ in {
           run sh -c "cat ${fccSeedEnvFile} > '$FCC_CONFIG_DIR/.env'"
         fi
 
-        SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
-        NVIDIA_KEY="$(grep -m1 '^NVIDIA_NIM_API_KEY=' "$SECRETS_FILE" 2>/dev/null | cut -d= -f2- || true)"
+        SECRETS_FILE="$HOME/.config/vayori/session/secrets.json"
         ENV_TMP="$(mktemp)"
-        grep -v '^NVIDIA_NIM_API_KEY=' "$FCC_CONFIG_DIR/.env" > "$ENV_TMP"
-        sh -c "printf 'NVIDIA_NIM_API_KEY=%s\n' \"\$1\" >> \"\$2\"" -- "$NVIDIA_KEY" "$ENV_TMP"
+        cp "$FCC_CONFIG_DIR/.env" "$ENV_TMP"
+
+        if [ -f "$SECRETS_FILE" ]; then
+          ${pkgs.jq}/bin/jq -r '.PROVIDERS // {} | to_entries[] | "\(.key)\t\(.value)"' "$SECRETS_FILE" \
+            | while IFS=$'\t' read -r providerKey providerValue; do
+                grep -v "^''${providerKey}=" "$ENV_TMP" > "$ENV_TMP.next" || true
+                mv "$ENV_TMP.next" "$ENV_TMP"
+                printf '%s=%s\n' "$providerKey" "$providerValue" >> "$ENV_TMP"
+              done
+        fi
+
         run cp "$ENV_TMP" "$FCC_CONFIG_DIR/.env"
         rm -f "$ENV_TMP"
 

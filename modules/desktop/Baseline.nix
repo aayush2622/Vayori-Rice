@@ -54,10 +54,16 @@
 
         };
 
-        home.file.".config/gtk-3.0/gtk.css".source =
-          pkgs.writeText "dank-colors.css" ''@import url("dank-colors.css");'';
-        home.file.".config/gtk-4.0/gtk.css".source =
-          pkgs.writeText "dank-colors.css" ''@import url("dank-colors.css");'';
+        home.activation.applyDmsGtkColors =
+          let
+            dmsShareDir = "${config.programs.dank-material-shell.package}/share/quickshell/dms";
+          in
+          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            if [ -f "$HOME/.config/gtk-3.0/dank-colors.css" ] || [ -f "$HOME/.config/gtk-4.0/dank-colors.css" ]; then
+              run mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
+              run ${dmsShareDir}/scripts/gtk.sh "$HOME/.config" false "${dmsShareDir}" || true
+            fi
+          '';
         home.pointerCursor = {
           enable = true;
           gtk.enable = true;

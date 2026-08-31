@@ -173,7 +173,6 @@
                 run chmod u+w "$sessionFile"
               fi
             '';
-          systemd.user.services.dms.Service.Environment = [ "DMS_ENABLE_GTK4_REFRESH=1" ];
 
           programs.dank-material-shell = {
             enable = true;
@@ -1274,8 +1273,6 @@
                     showOnOverviewOnly = false;
                     syncPositionAcrossScreens = true;
                   };
-
-                  positions = { };
                 }
               ];
 

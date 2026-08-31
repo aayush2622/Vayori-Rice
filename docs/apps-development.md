@@ -80,7 +80,7 @@ machine, pinned as real Nix packages instead of fetched live every time:
   it's the correct place regardless of what this repo does elsewhere.
   An activation script sets just the `api_key` line via `crudini`
   (reads `WAKATIME_API_KEY` from
-  `~/.config/vayori/session/secrets.env`), leaving any other settings
+  `~/.config/vayori/session/secrets.json`), leaving any other settings
   already in that file - proxy config, excluded projects - untouched.
   VS Code's own WakaTime extension reads the exact same file, so both
   editors end up correctly configured from one shared mechanism.
@@ -176,7 +176,7 @@ specific settings of its own to begin with.
   value here would end up baked into the world-readable `/nix/store`
   forever. It's spliced in separately, after Zed's own settings merge
   has run, by a small `jq` patch reading `WAKATIME_API_KEY` straight out
-  of `~/.config/vayori/session/secrets.env` - see
+  of `~/.config/vayori/session/secrets.json` - see
   [core/Users.nix](core.md#modulescoreusersnix) for that file's
   mechanism, which Free Claude Code's API key and VS Code/Android
   Studio's own WakaTime setup all go through too.
@@ -196,18 +196,18 @@ specific settings of its own to begin with.
 - **Arduino was in the real installed-extensions list but got dropped
   here on request**, along with the settings block it needed, since
   nothing here actually uses it.
-- **Zed gets a real matugen-driven theme, not the static light/dark pair
-  the real config used.** The theme template was hand-authored directly
-  against Zed's own published theme schema - not ported from an existing
-  theme, since none of the community ones matched this repo's palette
-  anyway. It sets around 140 style keys covering the visible surface
-  (editor, panels, terminal, git status colors, syntax highlighting) and
-  lets Zed fall back to its own defaults for the rest, since none of them
-  are actually required by the schema. Checked this by rendering the
-  real built template with placeholder colors substituted in and
-  confirming the result is valid JSON with every key matching the real
-  schema - about as close to "actually testing it" as this environment
-  allows for a GUI app with no display attached.
+- **Zed uses DMS's own matugen-driven theme now, not a custom one** -
+  `theme = "DankShell Dark"` names a theme straight out of DMS's own
+  `dank-zed-theme.json`, which `matugenTemplateZed = true` in
+  [Dms.nix](desktop.md#modulesdesktopdmsnix) keeps DMS regenerating
+  at `~/.config/zed/themes/dank-zed-theme.json` on every theme change.
+  This repo used to hand-author its own ~140-key theme against Zed's
+  published schema instead; DMS's own file covers the same ground (it
+  ships four ready variants - `DankShell Dark`/`Light`, plus
+  `Transparent` pairs) so the custom one was dropped rather than run
+  both for the same result. Zed just scans `~/.config/zed/themes/*.json`
+  for a `name` match, so nothing beyond that string has to agree with
+  what DMS writes.
 
 ---
 
@@ -311,20 +311,30 @@ and Android Studio's plugin.
   20 seconds in, before some steps had even run - so on a slow first
   activation, this really can cut things short. It's a real trade-off,
   not obviously the right number forever.
-- **The API-config file is seeded once and never overwritten.** Checked
-  FCC's own source to confirm this exact path (not the cloned repo's
-  own `.env`) is what the running server actually reads live config
-  from, and what its own admin UI writes API keys back into. Force-
-  declaring it the way some other config files in this repo are managed
-  would fight that admin UI for ownership and wipe out a pasted-in key
-  on every rebuild - so it's only written if it doesn't exist yet, same
-  pattern as the Papirus icon copy elsewhere. The provider API key line
-  gets filled in from `NVIDIA_NIM_API_KEY` in
-  `~/.config/vayori/session/secrets.env` at seed time (see
-  [core/Users.nix](core.md#modulescoreusersnix)) rather than left
-  commented out for a manual paste - generating the key itself still
-  isn't something this repo can do for you, grab a free one from NVIDIA
-  and drop it into that file, or set it through FCC's own admin UI
+- **The API-config file's base scaffold is seeded once and never
+  overwritten - the provider keys are a different story.** Checked FCC's
+  own source to confirm this exact path (not the cloned repo's own
+  `.env`) is what the running server actually reads live config from,
+  and what its own admin UI writes settings back into. Force-declaring
+  the *whole file* the way some other config files in this repo are
+  managed would fight that admin UI for ownership - so the scaffold
+  (`MODEL`, `PROXY_AUTH_ENABLED`, the auth token, `FCC_OPEN_BROWSER`) is
+  only written if the file doesn't exist yet, same "seed once" pattern
+  as the Papirus icon copy elsewhere. Provider API keys are handled
+  separately, and *do* re-sync every rebuild: every entry under
+  `PROVIDERS` in `~/.config/vayori/session/secrets.json` (see
+  [core/Users.nix](core.md#modulescoreusersnix) for the full schema)
+  gets merged in as its own `.env` line, keyed by whatever name is
+  already in `PROVIDERS` - FCC itself supports 17+ providers, each
+  needing its own correctly-named key (`NVIDIA_NIM_API_KEY`,
+  `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, and so on, straight from
+  FCC's own naming, not something this repo invents), so this is a real
+  loop over however many keys are actually there, not three hardcoded
+  ones. Verified for real: four providers merged correctly, then a fifth
+  added and one existing key changed, re-ran clean with no stale
+  duplicates and no lines lost. Generating a key itself still isn't
+  something this repo can do for you - grab one from whichever provider
+  and drop it into `PROVIDERS`, or set it through FCC's own admin UI
   instead.
 - **Claude Code's own state file gets one specific flag merged in** -
   documented upstream as the fix for Claude Code still prompting a real

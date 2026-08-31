@@ -8,8 +8,8 @@
 
     home.activation.rbwEmail = lib.hm.dag.entryAfter [ "writeBoundary" "seedVayoriSecrets" ] ''
       CONFIG_FILE="$HOME/.config/rbw/config.json"
-      SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
-      EMAIL="$(grep -m1 '^RBW_EMAIL=' "$SECRETS_FILE" 2>/dev/null | cut -d= -f2- || true)"
+      SECRETS_FILE="$HOME/.config/vayori/session/secrets.json"
+      EMAIL="$(${pkgs.jq}/bin/jq -r '.RBW_EMAIL // empty' "$SECRETS_FILE" 2>/dev/null || true)"
 
       run mkdir -p "$(dirname "$CONFIG_FILE")"
 

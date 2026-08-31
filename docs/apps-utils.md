@@ -124,7 +124,7 @@ makes sure the app itself is there.
 **`programs.rbw`** is a separate CLI vault, unrelated to the desktop
 app's own login - it's what the Bitwarden launcher plugin in DMS actually
 talks to behind the scenes. Its account email now comes from
-`RBW_EMAIL` in `~/.config/vayori/session/secrets.env` (see
+`RBW_EMAIL` in `~/.config/vayori/session/secrets.json` (see
 [core/Users.nix](core.md#modulescoreusersnix)) rather than a manual
 `rbw config set email`, merged into `~/.config/rbw/config.json` the same
 "seed once, don't fight a live file" way the WakaTime key does for the
@@ -143,7 +143,7 @@ One canonical folder - `~/.config/vayori/session` - for every app's real
 login/session state (Zen Browser's profile, Vesktop, VS Code/Zed account
 sign-ins, the JetBrains/Android Studio data dir, rbw's own session, the
 Bitwarden desktop app's local storage, Free Claude Code's `.env`, and
-`secrets.env` itself - see
+`secrets.json` itself - see
 [core.md](core.md#modulescoreusersnix)), plus one command to move that
 folder around safely. Fixed under `$HOME`, on purpose - completely
 independent of wherever this flake repo happens to be checked out, so
@@ -274,27 +274,27 @@ opaque `.json` files, so it reads like everything else in this repo.
   needed restructuring. One real difference: the native module doesn't
   force-overwrite, so a leftover file from an earlier manual Vesktop
   launch can collide with it on the very first switch - a one-time
-  delete of those two files clears that up. The QuickCSS path stays on
-  its own separate template rather than the module's built-in option,
-  since matugen already owns that exact file.
-- **QuickCSS is a real, curated theme, not a blank file** - it's
-  DiscordRecolor, kept byte-for-byte the same structure as the original,
-  with just the hardcoded colors swapped for matugen ones mapped by
-  best-fit intent (DiscordRecolor wants brightness/elevation ramps,
-  Material gives named roles - mapped brightest-to-darkest and
-  container-by-container rather than 1:1). It's not a home-manager file
-  either - matugen owns it outright and rewrites it on every wallpaper
-  change, same as everything else it touches in this repo.
-- **The shared font now actually reaches Discord's own chrome, not just
-  colors.** Discord/Vencord's UI reads its font off three CSS custom
-  properties (`--font-primary`, `--font-display`, `--font-code`) that
-  nothing was ever setting - real gap, Vesktop was matugen-themed for
-  color the whole time but never picked up the shared font choice at
-  all. The vesktop matugen template ([Matugen.nix](desktop.md#modulesdesktopmatugennix))
-  went from a plain string to a function taking the font, same pattern
-  [AndroidStudio.nix](apps-development.md#modulesappsdevelopmenteditorsandroidstudioandroidstudionix)
-  already used for its own matugen template - Vesktop.nix just needed
-  `vayoriTheme` added to its own module signature (it never had it
-  before) to actually call it with something. Confirmed against the real
-  built CSS file: all three properties resolve to the actual configured
-  font, not a placeholder.
+  delete of those two files clears that up.
+- **QuickCSS imports DMS's own theme rather than shipping a custom
+  one.** This repo used to carry its own hand-recolored DiscordRecolor
+  theme via a dedicated matugen template; DMS ships its own
+  matugen-themed Vesktop CSS too (the well-known
+  [midnight-discord](https://github.com/refact0r/midnight-discord)
+  theme, recolored), at `~/.config/vesktop/themes/dank-discord.css` -
+  running both was pure duplicated work for the same result, so the
+  custom template was dropped and DMS's own is used directly.
+  Vesktop only auto-loads QuickCSS, not the `themes/` folder DMS writes
+  to (same "needs a manual toggle" gap as GTK's own Apply button, just
+  for Vesktop's Settings > Themes tab), so
+  `home.activation.applyDmsVesktopTheme` writes
+  `~/.config/vesktop/settings/quickCss.css` as a plain `@import
+  url("../themes/dank-discord.css");` on every rebuild - a real file via
+  `install`, not a `home.file` symlink, so the relative import resolves
+  against Vesktop's own real config directory rather than wherever a
+  Nix store symlink's target happens to sit (same reasoning as the GTK4
+  `@import` fix in [desktop.md](desktop.md#modulesdesktopdmsnix)).
+- **The shared font still reaches Discord's own chrome, not just
+  colors** - Discord/Vencord's UI reads its font off a `--font` custom
+  property, appended after the `@import` in the same generated
+  `quickCss.css` so it layers on top of DMS's own theme rather than
+  needing DMS to know about this repo's font choice at all.

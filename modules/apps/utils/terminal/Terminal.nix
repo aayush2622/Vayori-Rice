@@ -132,6 +132,7 @@
         [templates.cava]
         input_path = '${config.home.homeDirectory}/.config/matugen/templates/cava-colors.ini'
         output_path = '${config.home.homeDirectory}/.config/cava/config'
+        post_hook = 'pkill -USR1 cava'
       '';
     };
 

@@ -118,10 +118,16 @@
       settings = {
         prefer-no-csd = true;
 
+        environment = {
+          QT_QPA_PLATFORMTHEME = "qt6ct";
+          QT_QPA_PLATFORMTHEME_QT6 = "qt6ct";
+        };
+
         xwayland-satellite.path = lib.getExe pkgs.xwayland-satellite;
         input = {
           keyboard.xkb.layout = "us";
           focus-follows-mouse = _: { };
+
           touchpad = {
             tap = _: { };
             natural-scroll = _: { };

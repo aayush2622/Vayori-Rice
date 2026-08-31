@@ -76,7 +76,15 @@
       home-manager.extraSpecialArgs = { inherit inputs self; vayoriTheme = config.vayori.theme; vayoriApps = config.vayori.apps; };
       home-manager.backupFileExtension = "backup";
 
-      home-manager.users = lib.mapAttrs (name: u: { lib, ... }: {
+      home-manager.users = lib.mapAttrs (name: u: { lib, pkgs, ... }: let
+        secretsSeed = pkgs.writeText "vayori-secrets-seed.json" (builtins.toJSON {
+          WAKATIME_API_KEY = "REPLACE_ME";
+          RBW_EMAIL = "REPLACE_ME";
+          PROVIDERS = {
+            NVIDIA_NIM_API_KEY = "REPLACE_ME";
+          };
+        });
+      in {
         imports = [
           self.homeModules.Baseline
         ] ++ (map (app: self.homeModules.apps.${app}) config.vayori.apps);
@@ -88,10 +96,10 @@
         };
 
         home.activation.seedVayoriSecrets = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          SECRETS_FILE="$HOME/.config/vayori/session/secrets.env"
+          SECRETS_FILE="$HOME/.config/vayori/session/secrets.json"
           if [ ! -f "$SECRETS_FILE" ]; then
             run mkdir -p "$(dirname "$SECRETS_FILE")"
-            run sh -c "printf 'NVIDIA_NIM_API_KEY=REPLACE_ME\nWAKATIME_API_KEY=REPLACE_ME\nRBW_EMAIL=REPLACE_ME\n' > '$SECRETS_FILE'"
+            run cp ${secretsSeed} "$SECRETS_FILE"
             run chmod 600 "$SECRETS_FILE"
           fi
         '';

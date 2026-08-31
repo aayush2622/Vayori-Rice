@@ -118,25 +118,39 @@ sudo nixos-rebuild switch --flake .#Diablo
 
 ## Secrets
 
-A handful of small credentials (an NVIDIA NIM API key for Free Claude
-Code, a WakaTime key for Zed/VS Code/Android Studio, a Bitwarden CLI
-email) live in one plain text file:
-`~/.config/vayori/session/secrets.env`. It gets seeded with placeholder
+A handful of small credentials (Free Claude Code's model-provider API
+keys, a WakaTime key for Zed/VS Code/Android Studio, a Bitwarden CLI
+email) live in one plain JSON file:
+`~/.config/vayori/session/secrets.json`. It gets seeded with placeholder
 values on first rebuild - just open it and fill in the real ones:
 
 ```bash
-$EDITOR ~/.config/vayori/session/secrets.env
+$EDITOR ~/.config/vayori/session/secrets.json
 ```
 
-No encryption layer, no keypair to generate or lose. These aren't
-high-stakes secrets (a self-hosted proxy token, a time-tracking key, an
-email address), and the file already lives somewhere that's never
-committed to git and has its own backup story - see below - so a whole
-extra layer for them wasn't buying much.
+```json
+{
+  "WAKATIME_API_KEY": "REPLACE_ME",
+  "RBW_EMAIL": "REPLACE_ME",
+  "PROVIDERS": {
+    "NVIDIA_NIM_API_KEY": "REPLACE_ME"
+  }
+}
+```
+
+`PROVIDERS` is open-ended - Free Claude Code supports 17+ model
+providers, and adding another one (`OPENROUTER_API_KEY`,
+`DEEPSEEK_API_KEY`, whatever matches the provider) is just another line
+in that object, no Nix edit or rebuild needed for the key to exist. No
+encryption layer, no keypair to generate or lose, either - these aren't
+high-stakes secrets (a proxy token, a time-tracking key, an email
+address), and the file already lives somewhere that's never committed
+to git and has its own backup story - see below - so a whole extra
+layer for them wasn't buying much.
 
 Actual login sessions (Zen Browser, Vesktop, VS Code/Zed accounts, rbw,
 Bitwarden desktop, Free Claude Code's `.env`) - and that same
-`secrets.env` - all get symlinked into one fixed folder,
+`secrets.json` - all get symlinked into one fixed folder,
 `~/.config/vayori/session`, automatically on every rebuild, regardless
 of where this repo happens to be checked out. So that one folder is the
 only thing that ever needs to move for a fresh install to come back
@@ -151,7 +165,7 @@ vayori-app-state restore ~/vayori-session.enc   # on the new one
 
 Full mechanism is in
 [docs/core.md](docs/core.md#modulescoreusersnix) (what's in
-`secrets.env` and how each app reads it) and
+`secrets.json` and how each app reads it) and
 [docs/apps-utils.md](docs/apps-utils.md#modulesappsutilsstatebackupstatebackupnix)
 (the session folder + CLI).
 
